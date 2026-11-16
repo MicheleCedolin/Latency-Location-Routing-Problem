@@ -47,3 +47,20 @@ jobs:
         run: |
           bash tests/smoke_hpc.sh
           bash tests/smoke_shards.sh
+
+  docs:
+    name: Web guide (docs/) build + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: docs/index.html is up to date with docs/src
+        run: python3 docs/build.py --check
+      - name: Engine tests (Node)
+        run: node docs/test/engine.test.mjs
+      - name: Page smoke test (jsdom)
+        run: |
+          npm install --prefix "$RUNNER_TEMP/jsd" jsdom --no-audit --no-fund --silent
+          JSDOM_FROM="$RUNNER_TEMP/jsd" node docs/test/dom.test.mjs
