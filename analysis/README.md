@@ -6,6 +6,9 @@ Scripts that turn the raw result archives of [`../study_results`](../study_resul
 | File | Content |
 |---|---|
 | [`ext10_report.py`](ext10_report.py) | 1x budget versus the extended "ext10" budget, anytime behaviour in iteration space, paired comparison with the published RLHEA values (Wilcoxon signed-rank) |
+| [`pool_sp.py`](pool_sp.py) | **Route pool + exact DP + set partitioning** over the final solutions of many runs (each customer once, at most `Nv` routes, at most `Ng` open depots): best run, SP raw, SP+DP (every route re-ordered optimally, [`dp_latency.cpp`](dp_latency.cpp)), and SP+DP with the routes of the published solution of Zou et al. (2024) added; coverage of the published routes by the pool (exact / same customer set / other depot / none). Needs numpy, scipy and g++. |
+| [`anytime_at_tavg.py`](anytime_at_tavg.py) | **Equal-time comparison:** best latency of every run at `f` x the published mean running time of RLHEA, for several `f`, and the time at which a run first reaches the published RLHEA average. The times come from different machines: `f` shows the sensitivity, it is not a hardware normalisation. |
+| [`llrp_pool.py`](llrp_pool.py) | Helpers of the two scripts above (instance / result / published-solution readers, route cost, DP wrapper). |
 | [`test_report.py`](test_report.py) | Self-test of the rank test and of the iteration bookkeeping (`python3 analysis/test_report.py`) |
 
 ## Reproduce
@@ -45,3 +48,20 @@ For the per-instance comparison with all published algorithms (not only RLHEA) s
    (RLHEA's published times are on other hardware).
 
 All sections are deterministic functions of the archived `run.csv` / `trace.csv` files; the CI job `bks` runs the report and checks the continuation count.
+
+## Pooled recombination and equal-time comparison (`pool_sp.py`, `anytime_at_tavg.py`)
+
+```bash
+mkdir -p /tmp/trees && tar xzf study_results/ext10_tuned.tar.gz -C /tmp/trees
+git clone --depth 1 https://github.com/YujiZou/LLRP /tmp/zou            # published solutions of Zou et al. (2024)
+python3 analysis/pool_sp.py /tmp/trees --published /tmp/zou/solutions --out out --jobs 4
+python3 analysis/anytime_at_tavg.py /tmp/trees --out out
+```
+
+A pooled value is a **multi-start recombination of many runs, not the result of one run** (cf. heuristic concentration, Rosing and ReVelle 1997;
+ILS-SP, Subramanian, Uchoa and Ochi 2013); report it in a column of its own. Integrity checks are part of the output: every run's latency is
+recomputed from its routes and every SP solution is audited (feasibility, recomputed latency = objective).
+
+**On GitHub:** *Actions -> Analysis -> Run workflow* ([`../.github/workflows/analysis.yml`](../.github/workflows/analysis.yml)). Inputs: result archives
+(paths in the repository or https URLs, space separated; default: the 1x and ext10 archives), whether to add the published solutions, an optional instance subset.
+The tables go to the job summary and to the branch `analysis-results` (`latest/`, `runs/<run id>/`). A full pass over 1x + ext10 takes roughly half an hour.
