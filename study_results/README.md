@@ -8,6 +8,7 @@ Directory trees are the standard output of `run_final.sh` / `run_extended.sh`: `
 |---|---|---|
 | [`final_1x_tuned.tar.gz`](final_1x_tuned.tar.gz) | **Final evaluation, 1x budget.** Tuned flags (`cpp/irace/best.flags`, irace configuration 267), CPU limit `max(5, 0.3 n)` s per run, 76 instances x 30 seeds. Tag `tuned`. Also `final_progress.log` and `replay_check_tuned.txt`. | 2280 |
 | [`ext10_tuned.tar.gz`](ext10_tuned.tar.gz) | **Extended budget "ext10".** Same flags, seeds and binary; CPU limit `3 n` s = 10x the 1x budget; the 58 instances with `n >= 75` (list: [`cpp/ext10_instances.txt`](../cpp/ext10_instances.txt)). Tag `ext10`. Written by `cpp/run_extended.sh`. | 1740 |
+| [`b1_tuned.tar.gz`](b1_tuned.tar.gz) | **B1** (V1 depot layer + run-internal route pool, exact DP and set partitioning), ext10 budget `3 n` s **including** the set-partitioning time, 57 instances with `n > 75` x 30 seeds. Built with `llrp_fast` v7, which is **not yet in this repository** (see `env.txt` inside; flags in `flags_B1.txt`). `Algorithm` column: `B1`. | 1710 |
 | [`atmost_50-5-2BIS-5.tar.gz`](atmost_50-5-2BIS-5.tar.gz) | **`--atmost` check** on Prins `50-5-2BIS-5` (tuned flags + `--atmost`, 1x budget, 30 seeds, [`cpp/irace/atmost.flags`](../cpp/irace/atmost.flags)): 30/30 runs reach 945.45187 = BKS. | 30 |
 | [`irace_logs.tar.gz`](irace_logs.tar.gz) | irace 4.5.1 log of the tuning run (3000 experiments, 17 training instances, seed 1): `irace/irace_stdout.txt`, `irace/trlog.txt`, `irace/best.flags`, scheduler log. | - |
 
