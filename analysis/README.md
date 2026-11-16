@@ -10,6 +10,8 @@ Scripts that turn the raw result archives of [`../study_results`](../study_resul
 | [`anytime_at_tavg.py`](anytime_at_tavg.py) | **Equal-time comparison:** best latency of every run at `f` x the published mean running time of RLHEA, for several `f`, and the time at which a run first reaches the published RLHEA average. The times come from different machines: `f` shows the sensitivity, it is not a hardware normalisation. |
 | [`llrp_pool.py`](llrp_pool.py) | Helpers of the two scripts above (instance / result / published-solution readers, route cost, DP wrapper). |
 | [`test_report.py`](test_report.py) | Self-test of the rank test and of the iteration bookkeeping (`python3 analysis/test_report.py`) |
+| [`depot_decomp.py`](depot_decomp.py) | Hierarchical decomposition of the difference between our final solutions and a reference solution: depot set (A), customer-to-depot assignment (B), route partition (C), visiting order (D), identical (E) |
+| [`test_depot_decomp.py`](test_depot_decomp.py) | Self-test of the decomposition (`python3 analysis/test_depot_decomp.py`) |
 
 ## Reproduce
 
@@ -65,3 +67,22 @@ recomputed from its routes and every SP solution is audited (feasibility, recomp
 **On GitHub:** *Actions -> Analysis -> Run workflow* ([`../.github/workflows/analysis.yml`](../.github/workflows/analysis.yml)). Inputs: result archives
 (paths in the repository or https URLs, space separated; default: the 1x and ext10 archives), whether to add the published solutions, an optional instance subset.
 The tables go to the job summary and to the branch `analysis-results` (`latest/`, `runs/<run id>/`). A full pass over 1x + ext10 takes roughly half an hour.
+
+## Depot-set decomposition (`depot_decomp.py`)
+
+When the engine ends above the reference value, is it because it opens other depots than the reference solution (class A), serves customers from other depots (B), partitions the
+customers into other routes (C) or only orders a route differently (D)? The script compares every final solution of a result directory (`run.csv` + `routes.csv`) with a reference
+solution and reports the class per run (`--out`, one row per instance and seed) and a summary.
+
+```bash
+git clone --depth 1 https://github.com/YujiZou/LLRP /tmp/zou                      # published solutions of Zou et al. (2024), the same source as pool_sp.py
+python3 analysis/depot_decomp.py /tmp/results_final/{barreto,prins,tuzun}/tuned --ref-solutions /tmp/zou/solutions --out decomp_1x.csv
+python3 analysis/depot_decomp.py /tmp/results_extended10/{barreto,prins,tuzun}/ext10 --ref-solutions /tmp/zou/solutions --out decomp_ext10.csv
+```
+
+The reference solutions are the files published with RLHEA (Zou et al. 2024), one `<name>.txt` per instance; they are third-party files and are not part of this repository.
+A file is used only if it covers every customer once and its latency, recomputed from the instance file, is within 0.1 % of the best published value; the instances that fail
+(Tuzun P112222-20: 90 of 100 customers; P131122-20: latency 8 times the published value; Barreto Or117-14: empty file) are listed and left out.
+On the 1x archive the classes of all 2190 runs on the remaining 73 instances equal those of the analysis of the study (A 25.7 %, B 34.2 %, C 13.6 %, D 5.8 %, E 20.8 % of the runs;
+the mean gap to the BKS falls from 3.7 % in class A to 0.8 / 0.4 / 0.01 / 0.00 % in B / C / D / E; 562 / 748 / 298 / 127 / 455 runs). On the ext10 archive the same 73-instance rule leaves out one instance more
+than the study did, Tuzun P112222-20, which the study included with a repaired solution file.

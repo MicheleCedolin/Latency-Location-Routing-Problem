@@ -29,3 +29,8 @@ large_ablation/*.log
 
 # analysis scripts: DP kernel built on first use
 analysis/libdp_latency.so
+
+paper/out/
+paper/__pycache__/
+paper/tests/__pycache__/
+analysis/__pycache__/

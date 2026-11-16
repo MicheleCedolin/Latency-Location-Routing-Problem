@@ -86,9 +86,29 @@ jobs:
         run: |
           tar xzf study_results/ext10_tuned.tar.gz -C "$RUNNER_TEMP"
           python3 -I analysis/test_report.py
+          python3 -I analysis/test_depot_decomp.py
           python3 -I analysis/ext10_report.py --base "$RUNNER_TEMP/results_final" --ext "$RUNNER_TEMP/results_extended10" | tee "$RUNNER_TEMP/ext.txt"
           grep -q "1740/1740 pairs agree" "$RUNNER_TEMP/ext.txt"
           grep -Eq "^ +ALL +58 \| +21/58 +29/58" "$RUNNER_TEMP/ext.txt"
+
+  paper:
+    name: Paper tables and figures (regenerated from the archived results)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install requirements
+        run: python -m pip install -r paper/requirements.txt
+      - name: Unit tests
+        run: python3 paper/tests/test_paper.py
+      - name: Regenerate all tables, numbers and figures
+        run: paper/run_all.sh "$RUNNER_TEMP/paper"
+      - name: Tables and quoted numbers equal the recorded checksums
+        run: cd "$RUNNER_TEMP/paper/out/tables" && sha256sum -c "$GITHUB_WORKSPACE/paper/expected/SHA256SUMS"
+      - name: Six figures were written
+        run: test "$(ls "$RUNNER_TEMP"/paper/out/figs/*.pdf | wc -l)" -eq 6
 
   large_ablation:
     name: Large-instance ablation runner (smoke test)
