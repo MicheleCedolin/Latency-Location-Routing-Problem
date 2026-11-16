@@ -28,6 +28,8 @@ jobs:
       - name: Instance data check
         working-directory: cpp
         run: ./check_inst_data.sh
+      - name: Engine versus exact optima on tiny random instances
+        run: python3 -I python/tools/exact_vs_engine.py --instances 40 --seeds 5
 
   python:
     name: Python kit tests
@@ -66,7 +68,7 @@ jobs:
           JSDOM_FROM="$RUNNER_TEMP/jsd" node docs/test/dom.test.mjs
 
   bks:
-    name: BKS table + literature results
+    name: BKS table, literature results, analysis
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -80,3 +82,27 @@ jobs:
           tar xzf study_results/final_1x_tuned.tar.gz -C "$RUNNER_TEMP"
           python3 -I bks/compare_published.py "$RUNNER_TEMP"/results_final/*/tuned/summary.csv | tee "$RUNNER_TEMP/cmp.txt"
           grep -q "^76 instances" "$RUNNER_TEMP/cmp.txt"
+      - name: Extended-budget report on the archived 1x and ext10 results
+        run: |
+          tar xzf study_results/ext10_tuned.tar.gz -C "$RUNNER_TEMP"
+          python3 -I analysis/test_report.py
+          python3 -I analysis/ext10_report.py --base "$RUNNER_TEMP/results_final" --ext "$RUNNER_TEMP/results_extended10" | tee "$RUNNER_TEMP/ext.txt"
+          grep -q "1740/1740 pairs agree" "$RUNNER_TEMP/ext.txt"
+          grep -Eq "^ +ALL +58 \| +21/58 +29/58" "$RUNNER_TEMP/ext.txt"
+
+  large_ablation:
+    name: Large-instance ablation runner (smoke test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install requirements
+        run: python -m pip install -r large_ablation/requirements.txt
+      - name: Checksums of the modules and instance workbooks
+        working-directory: large_ablation
+        run: sha256sum -c CHECKSUMS.sha256
+      - name: Smoke test (2 seeds x 3 iterations, determinism, resume, aggregate)
+        working-directory: large_ablation
+        run: python tests/test_smoke.py
