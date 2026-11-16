@@ -94,3 +94,4 @@ than the study did, Tuzun P112222-20, which the study included with a repaired s
 | `edge_granularity.py` | neighbour rank (k-NN) of every route edge of the published solutions of Zou et al. and of ours; which published edges our runs never use |
 | `edge_candidates.py` | coverage of the published edges by candidate edge sets (k-NN, union of the edges of m runs) versus their size |
 | `backbone_sp.py` + `enum_paths.cpp` | routes that can be built from the edges shared by many runs (frequency threshold) versus the pool of the runs' own routes; optional set partitioning. Workflow `Backbone` |
+| `restart_pool.py` | equal CPU: one long run versus k pooled short runs (route pool + DP + set partitioning). Workflow `Restarts` |
