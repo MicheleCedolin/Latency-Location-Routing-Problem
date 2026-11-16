@@ -1,0 +1,21 @@
+#!/bin/bash
+#$ -S /bin/bash
+#$ -cwd
+#$ -V
+#$ -N LLRPFINAL
+#$ -pe smp 16-30
+#$ -j y
+#$ -o final_sge.log
+# Final evaluation: 76 instances x 30 seeds with the best irace flags (irace/best.flags), on ONE node.  From this directory:
+#   PLAN_ONLY=1 ./run_final.sh               # time estimate first (nothing is submitted)
+#   qsub run_final.sge                       # everything (default: FAMILY=all, TC=30, TMIN=5 = same budget as irace, seeds 1..30)
+#   FAMILY=barreto qsub run_final.sge        # one family (-V carries the environment variables into the job);  qstat ; tail -f final_sge.log
+# '-pe smp 16-30': SGE grants as many slots of the range as fit; the number of concurrent tasks = NSLOTS (one process per slot, from a pool of instance x seed tasks).
+cd "${SGE_O_WORKDIR:-$PWD}" || exit 1
+export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
+echo "host $(hostname) | NSLOTS=${NSLOTS:-?} | job ${JOB_ID:-none} | FAMILY=${FAMILY:-all} TC=${TC:-30} TMIN=${TMIN:-5} SEEDS=${SEEDS:-30} SEED0=${SEED0:-1} | $(date)"
+echo "load (uptime): $(uptime)"
+./run_final.sh
+rc=$?
+echo "final evaluation finished: exit code $rc | $(date)"
+exit $rc

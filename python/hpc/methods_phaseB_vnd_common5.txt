@@ -1,0 +1,23 @@
+# Phase B (optional, NOT part of the frozen pilot): every method followed by the common VND with the five-move preset
+# `common5` (intra relocate, inter relocate, intra swap, intra 2-opt, depot reassign). Use it to separate the effect of the outer
+# metaheuristic from the effect of local search:
+#   METHODS_FILE=hpc/methods_phaseB_vnd_common5.txt OUT=analysis/phaseB_P50 INSTANCES=P50 TIME_LIMIT=120 NSEEDS=30 bash hpc/run.sh
+# Other local-search modules (local_search.py): vnd | rvnd | best | first | none; presets: baseline_route, common5, light, hgamp.
+# The local search is called inside each metaheuristic wherever it builds or perturbs a candidate (heuristics.py); the kit has no switch for an invocation policy.
+grasp   vnd  common5
+ils     vnd  common5
+vns     vnd  common5
+sa      vnd  common5
+tabu    vnd  common5
+ga      vnd  common5
+alns    vnd  common5
+msls    vnd  common5
+lns     vnd  common5
+brkga   vnd  common5
+aco     vnd  common5
+ta      vnd  common5
+ig      vnd  common5
+scatter vnd  common5
+pso     vnd  common5
+de      vnd  common5
+rkrs    vnd  common5

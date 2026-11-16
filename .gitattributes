@@ -1,2 +1,8 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Keep checksummed / byte-exact data as committed (SHA256SUMS in python/data must keep matching)
+python/data/** -text
+python/reference/*.csv -text
+cpp/data/** -text
+*.sh text eol=lf

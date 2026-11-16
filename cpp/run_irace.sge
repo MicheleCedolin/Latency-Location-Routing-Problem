@@ -1,0 +1,23 @@
+#!/bin/bash
+#$ -S /bin/bash
+#$ -cwd
+#$ -V
+#$ -N IRACE
+#$ -pe smp 30
+#$ -j y
+#$ -o irace_sge.log
+# Runs irace on ONE node with 30 slots (irace --parallel = number of allocated slots).  From this directory:
+#   qsub run_irace.sge                      # default: IRACE_MODE=time TC=30 TMIN=5 (scenario.txt: maxExperiments=3000)
+#   IRACE_MODE=iter qsub run_irace.sge      # fixed iteration budget (-V carries the environment variables into the job)
+#   qstat ; tail -f irace_sge.log ; qdel <job-id>
+# If 30 slots are not available (limited smp PE): change this to '#$ -pe smp 15'; irace --parallel follows NSLOTS automatically (about 2x longer).
+cd "${SGE_O_WORKDIR:-$PWD}" || exit 1
+export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
+export TRLOG=${TRLOG:-$PWD/irace/trlog.txt}
+echo "host $(hostname) | NSLOTS=${NSLOTS:-?} | job ${JOB_ID:-none} | IRACE_MODE=${IRACE_MODE:-time} TC=${TC:-30} TMIN=${TMIN:-5} ITERS=${ITERS:-150} | $(date)"
+echo "load (uptime): $(uptime)"
+./run_irace.sh --parallel "${NSLOTS:-30}"
+rc=$?
+echo "irace finished: exit code $rc | $(date)"
+[ $rc = 0 ] && ./bin/llrp_tools irace-flags --from-log irace/irace_stdout.txt --out irace/best.flags && echo "best.flags written"
+exit $rc

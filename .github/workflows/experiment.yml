@@ -1,0 +1,197 @@
+name: Experiment
+
+# Manual (workflow_dispatch) run of the C++ engine on the benchmark instances, split into seed blocks that
+# run in parallel on separate runners. The results of all blocks are merged and summarised in one artifact.
+#
+#   mode = config : cpp/run_config.sh  (iteration / stall budget; full1, full2, full3 or tuned = irace/best.flags)
+#   mode = final  : cpp/run_final.sh   (tuned configuration, CPU-time budget max(5, 30 n/100) s, independent verification)
+#
+# Note: GitHub-hosted runners are not the cluster the study was run on. Quality (cost) is reproducible for
+# iteration-limited runs (same binary + seed => same result); CPU times are NOT comparable with the paper.
+# Runners are free for public repositories; for private repositories the included minutes are limited.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "config = run_config.sh (iteration/stall budget), final = run_final.sh (tuned flags, CPU-time budget)"
+        type: choice
+        options: [config, final]
+        default: config
+      config:
+        description: "mode=config: full1 | full2 | full3 | tuned"
+        type: choice
+        options: [full1, full2, full3, tuned]
+        default: full3
+      family:
+        description: "Instance family (train/test only in mode=config; custom needs the instance list)"
+        type: choice
+        options: [barreto, prins, tuzun, train, test, all, custom]
+        default: barreto
+      instances:
+        description: "Optional instance names, space separated (required for family=custom), e.g. 'Ch50-5 P113212-10'"
+        type: string
+        default: ""
+      seeds:
+        description: "Number of seeds (one run per seed and instance)"
+        type: string
+        default: "30"
+      first_seed:
+        description: "First seed (seeds first_seed .. first_seed+seeds-1)"
+        type: string
+        default: "1"
+      seeds_per_job:
+        description: "Seeds per runner (= parallel processes on one 4-vCPU runner)"
+        type: string
+        default: "4"
+      max_iter:
+        description: "mode=config: maximum GRASP iterations"
+        type: string
+        default: "1000"
+      stall:
+        description: "mode=config: stop after this many non-improving iterations (0 = off)"
+        type: string
+        default: "300"
+      time_limit:
+        description: "mode=config: CPU-second limit per run (0 = off)"
+        type: string
+        default: "0"
+      tag:
+        description: "mode=final: name of the result directory"
+        type: string
+        default: "final"
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    name: Plan seed blocks
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.m.outputs.matrix }}
+    env:
+      MODE: ${{ inputs.mode }}
+      FAMILY: ${{ inputs.family }}
+      INSTANCES: ${{ inputs.instances }}
+      SEEDS: ${{ inputs.seeds }}
+      FIRST: ${{ inputs.first_seed }}
+      PER_JOB: ${{ inputs.seeds_per_job }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - id: m
+        run: |
+          set -euo pipefail
+          for v in SEEDS FIRST PER_JOB; do
+            [[ "${!v}" =~ ^[0-9]+$ ]] || { echo "::error::$v must be a non-negative integer"; exit 1; }
+          done
+          [ "$SEEDS" -ge 1 ] && [ "$PER_JOB" -ge 1 ] || { echo "::error::seeds and seeds_per_job must be >= 1"; exit 1; }
+          [[ "$INSTANCES" =~ ^[A-Za-z0-9_.\ -]*$ ]] || { echo "::error::invalid characters in instances"; exit 1; }
+          [[ "$TAG" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "::error::invalid tag"; exit 1; }
+          if [ "$FAMILY" = custom ] && [ -z "$INSTANCES" ]; then echo "::error::family=custom needs instance names"; exit 1; fi
+          if [ "$MODE" = final ] && { [ "$FAMILY" = train ] || [ "$FAMILY" = test ]; }; then
+            echo "::error::mode=final supports barreto|prins|tuzun|all|custom"; exit 1; fi
+          jobs=$(( (SEEDS + PER_JOB - 1) / PER_JOB ))
+          [ "$jobs" -le 256 ] || { echo "::error::more than 256 blocks"; exit 1; }
+          matrix=$(jq -cn --argjson s "$SEEDS" --argjson f "$FIRST" --argjson p "$PER_JOB" '
+            {include: [range(0; $s; $p) | {seed0: ($f + .), nproc: ([$p, $s - .] | min)}]}')
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "$jobs blocks: $matrix"
+
+  shard:
+    name: Seeds ${{ matrix.seed0 }}+ (${{ matrix.nproc }})
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      MODE: ${{ inputs.mode }}
+      CONFIG: ${{ inputs.config }}
+      FAMILY: ${{ inputs.family }}
+      INSTANCES: ${{ inputs.instances }}
+      MAXITER: ${{ inputs.max_iter }}
+      STALL: ${{ inputs.stall }}
+      TLIMIT: ${{ inputs.time_limit }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        working-directory: cpp
+        run: ./build.sh
+      - name: Run seed block
+        working-directory: cpp
+        run: |
+          set -euo pipefail
+          export OUT="$GITHUB_WORKSPACE/out" SEED0="${{ matrix.seed0 }}" PIN=0
+          read -ra INST <<< "$INSTANCES"
+          if [ "$MODE" = final ]; then
+            export SEEDS="${{ matrix.nproc }}" PAR="${{ matrix.nproc }}" REPLAY=0
+            ./run_final.sh "${INST[@]}"
+          else
+            export NPROC="${{ matrix.nproc }}" SUMMARY=0 OUTLEVEL=1
+            [ "$CONFIG" = tuned ] && export FLAGS_FILE=irace/best.flags
+            ./run_config.sh "$CONFIG" "${INST[@]}"
+          fi
+      - name: Pack results
+        if: always()
+        run: |
+          set -eu
+          [ -d out ] || { echo "no results"; exit 0; }
+          for e in out/*/*/env.txt; do [ -e "$e" ] && cp "$e" "${e%.txt}_seed${{ matrix.seed0 }}.txt"; done || true
+          tar czf shard.tgz -C out .
+          ls -l shard.tgz
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shard-${{ matrix.seed0 }}
+          path: shard.tgz
+          retention-days: 30
+          if-no-files-found: ignore
+
+  aggregate:
+    name: Merge + summarise
+    needs: shard
+    if: always() && needs.shard.result != 'skipped'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build tools
+        working-directory: cpp
+        run: ./build.sh
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: shard-*
+          path: shards
+      - name: Merge and summarise
+        working-directory: cpp
+        run: |
+          set -euo pipefail
+          AGG="$GITHUB_WORKSPACE/aggregate"; mkdir -p "$AGG"
+          for t in "$GITHUB_WORKSPACE"/shards/*/shard.tgz; do tar xzf "$t" -C "$AGG"; done
+          for d in "$AGG"/*/*/; do
+            [ -d "${d}runs" ] || continue
+            echo "=== $d"
+            ./bin/llrp_tools merge "$d" > /dev/null
+            args=(--manifest manifest.tsv); [ -s selection/train.txt ] && args+=(--train selection/train.txt)
+            ./bin/llrp_tools summarize "${d}run.csv" --csv "${d}summary.csv" "${args[@]}" | tee "${d}summary.txt"
+            { echo "### ${d#"$AGG"/}"; echo '```'; cat "${d}summary.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          done
+          if ls "$AGG"/*/*/runs/*.verify > /dev/null 2>&1; then
+            bad=$(grep -L '^OK' "$AGG"/*/*/runs/*.verify | wc -l)
+            echo "independent verification: failed runs = $bad"
+            [ "$bad" -eq 0 ]
+          fi
+      - name: Pack aggregate (without per-run files)
+        if: always()
+        run: |
+          [ -d aggregate ] || exit 0
+          tar czf aggregate.tgz --exclude='runs' -C aggregate .
+          ls -l aggregate.tgz
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: aggregate
+          path: aggregate.tgz
+          retention-days: 90
+          if-no-files-found: ignore

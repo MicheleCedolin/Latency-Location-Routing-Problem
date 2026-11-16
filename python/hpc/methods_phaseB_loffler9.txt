@@ -1,0 +1,22 @@
+# Phase B with the Loffler-aligned operator set (clean.6.2, opt-in, NOT part of the frozen pilot): every method followed by a first-improvement descent over the preset `loffler9`
+# (relocate-1, swap-1-1, relocate-2, swap-2-2, route_split, 2-opt*; fixed order, restart at the first operator after every improvement, first improving move executed),
+# the local-search design of Loffler, Bartolini, Schneider (2023, EJCO 11:100063): fixed order and first improvement. Not Loffler's VND: five of his 13 operators do not exist here and only feasible candidates are accepted.
+#   METHODS_FILE=hpc/methods_phaseB_loffler9.txt OUT=analysis/phaseB_loffler9_P50 INSTANCES=P50 TIME_LIMIT=120 NSEEDS=30 bash hpc/run.sh
+# The local search is called inside each metaheuristic wherever it builds or perturbs a candidate (heuristics.py); the kit has no switch for an invocation policy.
+grasp   first  loffler9
+ils     first  loffler9
+vns     first  loffler9
+sa      first  loffler9
+tabu    first  loffler9
+ga      first  loffler9
+alns    first  loffler9
+msls    first  loffler9
+lns     first  loffler9
+brkga   first  loffler9
+aco     first  loffler9
+ta      first  loffler9
+ig      first  loffler9
+scatter first  loffler9
+pso     first  loffler9
+de      first  loffler9
+rkrs    first  loffler9

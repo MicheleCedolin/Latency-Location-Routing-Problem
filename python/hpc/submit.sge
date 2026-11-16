@@ -1,0 +1,12 @@
+#!/bin/bash
+#$ -S /bin/bash
+#$ -cwd
+#$ -V
+#$ -N LLRP_A
+#$ -pe smp 15
+#$ -o logs/
+#$ -e logs/
+# Usage (run from the LLRP folder, after `mkdir -p logs`):
+#   qsub -v INSTANCES=P50,TIME_LIMIT=120,NSEEDS=30 hpc/submit.sge
+# Use colons inside a value (qsub -v splits variables on commas):  ONLY=grasp:sa  CHECKPOINTS=30:60:90:120
+bash hpc/run.sh

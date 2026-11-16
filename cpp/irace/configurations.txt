@@ -1,0 +1,4 @@
+op_relocate op_oropt2 op_oropt3 op_swap11 op_swap21 op_swap22 op_swap31 op_swap32 op_2opt op_2optstar op_swapstar op_dexch op_rdepot op_ds so rcl it_div it_int sel ord ils_on ils_k so_win_up so_win_down so_f1 so_f2 beta0
+1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 5 5 3 best random 0 NA 4 4 1.50 2.50 1.00
+1 1 0 1 1 1 0 0 1 0 1 1 0 1 1 5 5 3 best random 0 NA 4 4 1.50 2.50 1.00
+1 1 1 1 1 1 1 1 1 1 1 1 1 0 0 5 5 3 best random 0 NA NA NA NA NA NA
