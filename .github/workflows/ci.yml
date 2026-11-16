@@ -64,3 +64,19 @@ jobs:
         run: |
           npm install --prefix "$RUNNER_TEMP/jsd" jsdom --no-audit --no-fund --silent
           JSDOM_FROM="$RUNNER_TEMP/jsd" node docs/test/dom.test.mjs
+
+  bks:
+    name: BKS table + literature results
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: literature_results.csv is consistent with LLRP_BKS.csv
+        run: python3 -I bks/check_literature.py
+      - name: Comparison script on the archived 1x results
+        run: |
+          tar xzf study_results/final_1x_tuned.tar.gz -C "$RUNNER_TEMP"
+          python3 -I bks/compare_published.py "$RUNNER_TEMP"/results_final/*/tuned/summary.csv | tee "$RUNNER_TEMP/cmp.txt"
+          grep -q "^76 instances" "$RUNNER_TEMP/cmp.txt"
