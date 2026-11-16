@@ -8,6 +8,8 @@ The LLRP asks for a set of open depots and a set of vehicle routes that serve al
 (cumulative cost; vehicles do not return to the depot; at most `Nv` routes, at most `Ng` open depots; depot capacities are ignored, as in the literature).
 Problem definition: [`python/FORMULATION_LLRP.md`](python/FORMULATION_LLRP.md).
 
+**Learn and try it in the browser:** the interactive guide in [`docs/`](docs) (open `docs/index.html`, or the GitHub Pages site once enabled: `https://michelecedolin.github.io/Latency-Location-Routing-Problem/`) explains the operators and the 19 heuristics and lets you run a small version of the search.
+
 ## Repository layout
 
 | Folder | Content |
@@ -16,6 +18,7 @@ Problem definition: [`python/FORMULATION_LLRP.md`](python/FORMULATION_LLRP.md).
 | [`study_results/`](study_results) | Raw result files of the study: final evaluation at the 1x and the 10x ("ext10") CPU budget, the `--atmost` check, the irace log. → [`study_results/README.md`](study_results/README.md) |
 | [`bks/`](bks) | `LLRP_BKS.csv`: best-known value, bounds and verification status of every instance. → [`bks/README.md`](bks/README.md) |
 | [`python/`](python) | Python heuristic laboratory (17 campaign metaheuristics, delta-evaluating local search, adaptive depot layer, SGE launcher, 120 unit tests) with the raw instance files and the registry of the 76 instances. → [`python/README.md`](python/README.md) |
+| [`docs/`](docs) | **Interactive guide** (GitHub Pages): the 14 operators with before/after moves and hover details, the 19 metaheuristics with parameters and references, a GRASP + RVND playground in the browser, BibTeX. One self-contained page, built from `docs/src` by `docs/build.py`. → [`docs/README.md`](docs/README.md) |
 | [`.github/workflows/`](.github/workflows) | `ci.yml` (build + self-check + unit tests) and `experiment.yml` (manually triggered experiments on GitHub runners). |
 
 ## Quick start (C++)
@@ -86,7 +89,7 @@ and a single job is limited to 6 hours, so the Tüzün family should be run with
 ## References
 
 * Moshref-Javadi, M., Lee, S. (2016). The latency location-routing problem. *European Journal of Operational Research* 255(2):604–619.
-* Zou, Y., Hao, J.-K., Wu, Q. (2024). *Computers & Operations Research* 170:106758 (RLHEA for the LLRP).
+* Zou, Y., Hao, J.-K., Wu, Q. (2024). A reinforcement learning guided hybrid evolutionary algorithm for the latency location routing problem. *Computers & Operations Research* 170:106758, doi:10.1016/j.cor.2024.106758 (RLHEA).
 * Silva, M. M., Subramanian, A., Vidal, T., Ochi, L. S. (2012). A simple and effective metaheuristic for the Minimum Latency Problem. *European Journal of Operational Research* 221(3):513–520.
 * López-Ibáñez, M., Dubois-Lacoste, J., Pérez Cáceres, L., Birattari, M., Stützle, T. (2016). The irace package. *Operations Research Perspectives* 3:43–58.
 * Barreto, S. et al. (2007), *EJOR* 179(3):968–977; Prins, C., Prodhon, C., Wolfler Calvo, R. (2006), *4OR* 4(3):221–238; Tüzün, D., Burke, L. I. (1999), *EJOR* 116(1):87–99 (instances).

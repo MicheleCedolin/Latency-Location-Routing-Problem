@@ -247,7 +247,7 @@ static int cmd_ablation(int argc, char **argv) {
     for (size_t i = 0; i < add.size(); i++) add_by[add[i].op] = &add[i];
     printf("\n== 6) OPERATOR COST-BENEFIT SUMMARY (relative to FULL) ==\n");
     printf("CPU%% = CPU spent in the operator's own calls (scan + move application + table preparation) / total run CPU.  Total attributed to operators: %.1f%%;\n", 100 * attributed);
-    printf("geri kalan %.1f%% = kurucu (ECWA), bozma, dongu ve kayit islemleri (operatore atfedilmeyen).\n", 100 * (1 - attributed));
+    printf("the remaining %.1f%% = construction (ECWA), perturbation, loop and bookkeeping (not attributed to an operator).\n", 100 * (1 - attributed));
     printf("%-9s %7s %9s %10s %9s %10s %9s  %s\n", "operator", "CPU%", "dCPU%LOO", "dGap_LOO", "p_Holm", "dGap_ADD", "p_Holm", "decision");
     struct CB { string op; double share, dcpu, dl, pl, da, pa; string verdict; };
     vector<CB> cb;
