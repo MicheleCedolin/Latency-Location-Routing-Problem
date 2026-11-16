@@ -43,7 +43,7 @@ def main():
     ap.add_argument('--out', default='edge_candidates_out')
     a = ap.parse_args()
     out = Path(a.out)
-    out.mkdir(exist_ok=True)
+    out.mkdir(parents=True, exist_ok=True)
     M = P.load_manifest()
     pub = P.load_published(a.published, M)
     lit = P.load_literature()
