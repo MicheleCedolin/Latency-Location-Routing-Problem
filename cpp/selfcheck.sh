@@ -8,6 +8,7 @@
 #   3) same seed twice -> bit-identical cost (determinism); passing the default constants explicitly gives the same result (flag identity)
 #   4) run_config.sh -> merge -> check-csv (small run, 2 seeds)
 #   5) irace dry run (target-runner chain; irace itself is not needed)
+#   6) --atmost (at most Ng open depots): --check + independent verifier on Prins 50-5-2BIS-5 with the tuned flags; the default (exactly Ng) is unchanged
 HERE=$(cd "$(dirname "$0")" && pwd)
 BIN=${BIN:-$HERE/bin/llrp_fast}; TOOLS=${TOOLS:-$HERE/bin/llrp_tools}
 { [ -x "$BIN" ] && [ -x "$TOOLS" ]; } || "$HERE/build.sh" || exit 1
@@ -56,5 +57,14 @@ else echo "   FAILED"; tail -5 "$T/rc.log"; cat "$T/cc.log" 2>/dev/null; fail=1;
 
 echo "5) irace dry run (irace itself is not required)"
 if "$HERE/irace_dryrun.sh" 2 > "$T/dry.log" 2>&1; then echo "   OK"; else echo "   FAILED"; tail -5 "$T/dry.log"; fail=1; fi
+
+echo "6) --atmost (at most Ng open depots) with --check + verifier"
+FLT=$(cat "$HERE/irace/best.flags"); I2=$HERE/inst/prins/50-5-2BIS-5.inst
+ok6=1
+"$BIN" --instance "$I2" --seed 1 $FLT --atmost --max-iter 60 --check --out-level 1 --out "$T/am" --quiet > "$T/am.txt" 2>&1 || ok6=0
+"$TOOLS" verify "$I2" "$T/am" > "$T/am.v" 2>&1 || ok6=0
+"$BIN" --instance "$I2" --seed 1 $FLT --max-iter 60 --out-level 1 --out "$T/ex" --quiet > "$T/ex.txt" 2>&1 || ok6=0
+"$TOOLS" verify "$I2" "$T/ex" > "$T/ex.v" 2>&1 || ok6=0
+if [ $ok6 = 1 ]; then echo "   OK (--atmost: $(grep final_cost "$T/am.txt"); default: $(grep final_cost "$T/ex.txt"))"; else echo "   FAILED"; tail -3 "$T/am.txt" "$T/am.v" "$T/ex.v" 2>/dev/null; fail=1; fi
 
 [ $fail = 0 ] && echo "SELFCHECK: ALL OK" || { echo "SELFCHECK: FAILED"; exit 1; }

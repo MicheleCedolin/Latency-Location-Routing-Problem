@@ -341,7 +341,7 @@ static bool verify_one(const Instance &I, const string &prefix, double &total_ou
     for (size_t i = 0; part && i < seen.size(); i++) if (seen[i] != (int)i) part = false;
     if (!part) errs.push_back("customers are not a partition of 0..n-1");
     if (nroutes > I.Nv) errs.push_back(fmt("%d routes > Nv=%d", nroutes, I.Nv));
-    if ((int)open_set.size() != I.Ng) errs.push_back(fmt("%zu open depots != Ng=%d", open_set.size(), I.Ng));
+    if ((int)open_set.size() > I.Ng) errs.push_back(fmt("%zu open depots > Ng=%d", open_set.size(), I.Ng));   // at most Ng depots (>= 1); runs that open exactly Ng depots still pass
     vector<int> os(open_set.begin(), open_set.end()), dr = depots_rep;
     std::sort(dr.begin(), dr.end());
     if (os != dr) errs.push_back("open depots in run.csv differ from the routes");
