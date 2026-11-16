@@ -1,0 +1,4 @@
+instance,column,value,note
+20-5-1b-5,zou_best,608.05,RLHEA best as used in the manuscript tables (equals the BKS); the published supplement prints 608.06 (unrounded optimum 608.055)
+Ch50-5,zou_tavg,18.6,RLHEA average run time as used in the manuscript tables; the published supplement prints 18.7
+50-5-1-5,zou_tavg,15.71,RLHEA average run time with two decimals as printed in the RLHEA paper; the supplement rounds to 15.7

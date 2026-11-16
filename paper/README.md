@@ -1,0 +1,48 @@
+# Paper pipeline — tables, quoted numbers and figures
+
+Regenerates every results table, every number quoted in the text and every result figure of the study from the archived raw results in
+[`../study_results`](../study_results). One command, about 15 seconds:
+
+```bash
+pip install -r paper/requirements.txt        # numpy, pandas, scipy, matplotlib
+paper/run_all.sh                             # output in /tmp/llrp_paper/out/{data,tables,figs};  or: paper/run_all.sh DIR
+```
+
+| Script | Writes | Content |
+|---|---|---|
+| [`prep.py`](prep.py) | `data/*.csv` | Data layer. Standard budget (2280 runs) and extended budget (1740 runs): per-instance statistics, time to target, anytime grids (CPU seconds and iteration space), operator statistics |
+| [`tables.py`](tables.py) | `tables/tab_small.tex`, `tab_ops.tex`, `tab_appendix.tex`, `numbers_n50.txt` | Instances with n ≤ 50, operator statistics, all 76 instances at the standard budget |
+| [`tables_ext.py`](tables_ext.py) | `tables/tab_large.tex`, `tab_appendix_ext.tex`, `numbers_ext.txt` | The 58 instances with n ≥ 75 at the standard and the extended budget; numbers quoted in the text (Wilcoxon signed-rank tests against RLHEA, equal-time comparison, time to target) |
+| [`anytime_numbers.py`](anytime_numbers.py) | `tables/numbers_anytime.txt` | Mean gap of the incumbent at 10 / 25 / 50 % of the standard budget and at the end, by instance size class |
+| [`figs.py`](figs.py) | `figs/fig_effort`, `fig_ops`, `fig_irace_ops` (`.pdf` + `.png`) | Budget and iterations, operator share of CPU time, operators in the elite irace configurations (computed from the irace log) |
+| [`figs_ext.py`](figs_ext.py) | `figs/fig_gap_instances`, `fig_ttt`, `fig_anytime` | Gap per instance (standard budget for n ≤ 50, extended for n ≥ 75), time to the RLHEA mean value, anytime curves |
+| [`paperlib.py`](paperlib.py) | | Reference table and output layout shared by the scripts |
+| [`tests/test_paper.py`](tests/test_paper.py) | | Unit tests (`python3 paper/tests/test_paper.py`) |
+| [`expected/SHA256SUMS`](expected/SHA256SUMS) | | SHA-256 of the five `.tex` tables and three `numbers_*.txt` files; checked by the CI job `paper` |
+
+## Where the inputs come from
+
+* **Runs**: `final_1x_tuned.tar.gz` (tag `tuned`, 76 instances x 30 seeds, CPU limit max{5, 0.3 n} s), `ext10_tuned.tar.gz` (tag `ext10`, 58 instances x 30 seeds, 3 n s), `irace_logs.tar.gz`.
+* **Prins `50-5-2BIS-5`** is reported with the `--atmost` re-run (`atmost_50-5-2BIS-5.tar.gz`): its default-setting runs (949.10, exactly Ng open depots) are replaced by the at-most runs in
+  the standard-budget layer (`prep.py --no-atmost` keeps the default-setting runs). The extended-budget layer covers only instances with n ≥ 75 and is not affected.
+* **Per-instance reference table** (`paperlib.reference()`), all from this repository: family, n and best-known value from [`../cpp/manifest.tsv`](../cpp/manifest.tsv);
+  best value, average value and average run time of RLHEA (Zou et al. 2024) from [`../bks/literature_results.csv`](../bks/literature_results.csv); the 17 tuning instances from
+  [`../cpp/selection/train.txt`](../cpp/selection/train.txt).
+  [`reference_overrides.csv`](reference_overrides.csv) lists the three values for which the tables use a slightly different published figure than the supplement of that table
+  (20-5-1b-5 best 608.05 instead of 608.06, which is the rounded 608.055; Ch50-5 average time 18.6 s instead of 18.7 s; 50-5-1-5 average time 15.71 s instead of 15.7 s).
+  These values were taken from the tables of the manuscript draft; check them against Appendix A of Zou et al. (2024) before submission.
+
+## Verification
+
+The five tables and the two number files written by `tables.py` and `tables_ext.py` are **byte-identical** to those produced by the pipeline of manuscript draft v3.4 (its tables and number files);
+`expected/SHA256SUMS` pins them, and CI regenerates everything from the archives on every push. The numbers of `anytime_numbers.py` reproduce the values quoted
+in the text (n ≤ 50: 0.103 / 0.005 / 0.001 %; 75 ≤ n ≤ 134: 1.28 → 0.75 %; n = 150: 2.23 → 1.47 %; n = 200: 5.59 → 3.36 %). Figures are not byte-checked (matplotlib versions differ in
+the last pixel); CI only counts them.
+
+## Notes
+
+* Table captions are the ones of the manuscript and contain LaTeX cross-references (`\ref`, `\citet`) that exist only in the manuscript source.
+* The extended campaign ran on a node with 1.33 x the CPU time per iteration of the standard campaign. Comparisons across the two budgets are therefore made in **iteration space**
+  (`anytime_grid_iter.csv`, `slices_iter.csv`). The CPU-second slices (`slices_ext.csv`, equal-time comparison at the RLHEA run time, time to target on the extended traces) are
+  conservative for the method and are labelled as such in the quoted numbers.
+* Standard-library-only analysis of the same archives: [`../analysis`](../analysis) (`ext10_report.py`, `depot_decomp.py`).
