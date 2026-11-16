@@ -1,0 +1,7 @@
+archive: study_results/ext10_tuned.tar.gz
+alg: ext10
+minfreqs: 3 5 8
+instances: 
+run_sp: false
+commit: a89f7b65d4d45ae40f234ac40ec1813c01f27f67
+run: https://github.com/MicheleCedolin/Latency-Location-Routing-Problem/actions/runs/43886958507
