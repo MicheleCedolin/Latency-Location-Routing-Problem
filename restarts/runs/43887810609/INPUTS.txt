@@ -1,0 +1,7 @@
+short: study_results/final_1x_tuned.tar.gz
+long: study_results/ext10_tuned.tar.gz
+k: 10
+draws: 10
+instances: 
+commit: 6adeb7d55606a2557fbfef6bd782425ac65578aa
+run: https://github.com/MicheleCedolin/Latency-Location-Routing-Problem/actions/runs/43887810609
