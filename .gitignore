@@ -26,3 +26,6 @@ __pycache__/
 large_ablation/results_large*/
 large_ablation/results_full*/
 large_ablation/*.log
+
+# analysis scripts: DP kernel built on first use
+analysis/libdp_latency.so

@@ -1,0 +1,86 @@
+name: Analysis
+
+# Post-hoc analyses of result archives (no experiments are run here):
+#   * route pool + exact DP + set partitioning over the final solutions of many runs, with and without the routes of the published
+#     solutions of Zou et al. (2024), and coverage of those routes by the pool            -> analysis/pool_sp.py
+#   * equal-time comparison with RLHEA (incumbent at its published running time) and time to target -> analysis/anytime_at_tavg.py
+# The tables are written to the job summary and committed to the branch `analysis-results` (latest/ and runs/<run id>/).
+on:
+  workflow_dispatch:
+    inputs:
+      archives:
+        description: 'Result archives (.tar.gz / .tgz), space separated: paths in this repository or https URLs'
+        default: 'study_results/final_1x_tuned.tar.gz study_results/ext10_tuned.tar.gz'
+      published:
+        description: 'Also use the published solutions of Zou et al. (cloned from YujiZou/LLRP at run time)'
+        type: boolean
+        default: true
+      instances:
+        description: 'Optional comma-separated instance subset for pool_sp.py (default: all)'
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  analysis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      ARCHIVES: ${{ inputs.archives }}
+      INSTANCES: ${{ inputs.instances }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install numpy, scipy
+        run: python -m pip install numpy scipy
+      - name: Build the DP kernel
+        run: g++ -O2 -shared -fPIC -o analysis/libdp_latency.so analysis/dp_latency.cpp
+      - name: Unpack the archives
+        run: |
+          mkdir -p /tmp/trees
+          i=0
+          for a in $ARCHIVES; do
+            i=$((i + 1))
+            case "$a" in
+              http*) curl -fsSL -o "/tmp/a$i.tgz" "$a"; f="/tmp/a$i.tgz" ;;
+              *) f="$a" ;;
+            esac
+            mkdir -p "/tmp/trees/$i"
+            tar xzf "$f" -C "/tmp/trees/$i"
+          done
+          find /tmp/trees -name run.csv | sort
+      - name: Published solutions (Zou et al. 2024)
+        if: ${{ inputs.published }}
+        run: git clone --depth 1 https://github.com/YujiZou/LLRP /tmp/zou
+      - name: Equal-time comparison and time to target
+        run: python analysis/anytime_at_tavg.py /tmp/trees/* --out analysis_out
+      - name: Route pool + DP + set partitioning
+        run: |
+          pub=""
+          if [ "${{ inputs.published }}" = "true" ]; then pub="--published /tmp/zou/solutions"; fi
+          inst=""
+          if [ -n "$INSTANCES" ]; then inst="--instances $INSTANCES"; fi
+          python analysis/pool_sp.py /tmp/trees/* $pub $inst --jobs 4 --out analysis_out 2>pool_sp.log || { tail -30 pool_sp.log; exit 1; }
+      - name: Job summary
+        run: |
+          cat analysis_out/anytime_at_tavg_summary.md analysis_out/pool_sp_summary.md | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Commit the results to the branch analysis-results
+        run: |
+          out="runs/${{ github.run_id }}"
+          rm -rf /tmp/res && mkdir /tmp/res && cd /tmp/res
+          git init -q
+          git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          if git fetch -q --depth 1 origin analysis-results; then git checkout -q -b analysis-results FETCH_HEAD; else git checkout -q --orphan analysis-results; fi
+          mkdir -p "$out" latest
+          cp "$GITHUB_WORKSPACE"/analysis_out/* "$out"/
+          printf 'archives: %s\npublished: %s\ninstances: %s\ncommit: %s\nrun: %s/%s/actions/runs/%s\n' \
+            "$ARCHIVES" "${{ inputs.published }}" "$INSTANCES" "${{ github.sha }}" "${{ github.server_url }}" "${{ github.repository }}" "${{ github.run_id }}" > "$out/INPUTS.txt"
+          rm -rf latest && mkdir latest && cp "$out"/* latest/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Analysis results of run ${{ github.run_id }}"
+          git push -q origin analysis-results
