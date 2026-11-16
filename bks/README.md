@@ -30,4 +30,34 @@ No BKS turned out to be numerically wrong; two of them cannot be verified from p
 * `python/reference/LLRP_reference.csv` carries the same values (plus `K`, `p`, minimum vehicles/depots by capacity) under the Python kit's instance names (`coordP111112`, ...). Two entries differ in the last digit because of rounding:
   `20-5-1b-5` (608.05 here, 608.06 there; the unrounded value is 608.055) and `Or117-14` (53798.53 here, 53798.5 there).
 * `python/reference/published_check.csv` lists, for every published solution file, its recomputed latency and relative deviation from the registry value.
-* Literature results other than the best-known values (average values and running times of RLHEA and other algorithms) are published in the original papers and are **not** reproduced in this table; running times in the literature were measured on different hardware and are not comparable with the CPU-time budgets used here.
+* Literature results other than the best-known values are in [`literature_results.csv`](literature_results.csv) (next section).
+
+## Published results of other algorithms (`literature_results.csv`)
+
+Best value, average value and running time of seven published algorithms on the 76 instances, for context and for the gap/win-tie-loss comparison with this repository.
+
+| Column | Meaning |
+|---|---|
+| `instance`, `family`, `n`, `m`, `Nv` | As in `LLRP_BKS.csv` (`m` = candidate depots, `Nv` = route bound) |
+| `algorithm` | `MA` (memetic algorithm, Moshref-Javadi & Lee 2016), `GBILS`, `SA-VND0`, `SA-VND1`, `SA-VND2` (simulated annealing + VND, Osorio-Mora et al. 2023, ITOR 30(6):3801–3832, DOI 10.1111/itor.13294), `M-ILS` (Osorio-Mora et al. 2023, C&OR 158:106293), `RLHEA` (Zou et al. 2024, C&OR 170:106758), `MS-VNS` (Osorio-Mora, Saldanha-da-Gama & Toth 2025, EJOR 321(3):837–850) |
+| `best`, `avg` | Best and average total latency over the runs of the original study (two decimals; `avg` is empty for `GBILS`, which is reported with its best value only) |
+| `time_s` | Running time in seconds as reported (mean over the runs; for RLHEA the stopping time) |
+
+570 rows = 76 instances × 7 algorithms + `GBILS` on 38 instances (Barreto and Prins; no values for two Barreto instances, none for Tüzün–Burke).
+
+* **Source and transcription.** The values were transcribed from the supplementary tables SM-5, SM-6 and SM-7 (deterministic LLRP) of Osorio-Mora et al. (2025). Checks: n / m / Nv agree with `LLRP_BKS.csv`, and the best-known value of the supplement equals the smallest `best` of every instance (re-run by `check_literature.py`); at transcription the column means were also compared with the printed "Global avg." rows.
+  One inconsistency lies inside the source: the Prins-set `MA` average column (the 30 rows average 1658.85, the printed global average is 1610.33; the other columns reconcile). Instance names follow `LLRP_BKS.csv`; the supplement's `Gaskell-32-5b` is `Gaskell32-5`, `Christ-*` is `Ch*`, `Min-*` is `Mi*`.
+* **Not comparable with our CPU budgets.** The times come from other machines, run counts and stopping rules (the numbers of runs behind each `avg` are those of the original papers). Use them for orders of magnitude, not as a speed comparison.
+* **Differences to the registry.** `bks` equals the smallest published `best` for 74 of 76 instances; the two exceptions are the rounding cases above (`20-5-1b-5`: 608.05 vs 608.06, `Or117-14`: 53798.53 vs 53798.50).
+* Please cite the original papers when using these values; `python3 bks/check_literature.py` re-checks the file against `LLRP_BKS.csv` (CI runs it).
+
+### Comparing your own results
+
+```bash
+# any summary.csv written by run_final.sh / run_config.sh (columns instance, best, mean, cpu_mean, ...)
+tar xzf study_results/final_1x_tuned.tar.gz -C /tmp
+python3 bks/compare_published.py /tmp/results_final/*/tuned/summary.csv
+python3 bks/compare_published.py my_summary.csv --only-n-ge 75 --per-instance per_instance.csv
+```
+
+The script prints, per family and overall, the mean gap to the BKS of our best run and mean, the same for every published algorithm, the number of instances at the BKS and the win / tie / loss counts of our best (mean) against the published `best` (`avg`) of each algorithm (a tie is a difference of at most 0.005). Standard library only.
