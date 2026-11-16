@@ -1,0 +1,7 @@
+archive: study_results/b1_tuned.tar.gz
+alg: B1
+minfreqs: 3 5
+instances: 
+run_sp: false
+commit: 23cf30c5ed59ec0ddb073a3a7ac5809f677ffa50
+run: https://github.com/MicheleCedolin/Latency-Location-Routing-Problem/actions/runs/43941093201
