@@ -19,7 +19,7 @@ On the cluster the scripts find conda and a suitable Python themselves (`hpc/pye
 
 ```bash
 bash tests/smoke_hpc.sh && bash tests/smoke_shards.sh   # launcher checks (~20 s)
-python3 -m unittest discover -s tests            # 120 tests, 1 skipped (~90 s); LLRP_PUBLISHED_DIR=<clone of github.com/YujiZou/llrp>/solutions enables the published-solution reproduction test
+python3 -m unittest discover -s tests            # 128 tests, 1 skipped (~95 s); LLRP_PUBLISHED_DIR=<clone of github.com/YujiZou/llrp>/solutions enables the published-solution reproduction test
 
 # one short run: instance id, seed, method, 10 s budget
 python3 run_llrp.py --instances coord50-5-1 --seeds 1 --heuristic alns --local-search none \
@@ -109,7 +109,9 @@ Campaign use: `EXTRA_ARGS="--start-mix 0.5 --depot-mode race --sp-share 0.15"` (
 | `llrp_framework/depot_*.py` | adaptive depot-set layer (explore swap / swap2 / open; exploit by set-restricted ruin-and-recreate) |
 | `llrp_framework/params.py` | instance registry (K, p, BKS) and groups |
 | `reference/` | `LLRP_reference.csv`, `published_check.csv`, scripts that generate them |
+| `llrp_framework/exact.py` | exact reference solvers for tiny instances: dynamic program (n <= 11, standard objective) and brute force (n <= 6, any constraint of the kit), `random_instance` generator |
 | `tools/indep_check.py` | stand-alone latency / feasibility checker (no kit imports) |
+| `tools/exact_vs_engine.py` | validates the C++ solver `llrp_fast` against exact optima on tiny random instances (no run may be cheaper than the optimum; with `--atmost` the best seed reaches it) |
 | `hpc/` | launcher (`run.sh`, `SHARD=i/N`), staged campaign (`submit_llrp_campaign.sh`, `campaign_arm.sge`, `finalize.sh`), method tables, SGE scripts |
 | `tests/` | unit, equivalence and integrity tests |
 

@@ -1,0 +1,47 @@
+# Analysis of the archived study results
+
+Scripts that turn the raw result archives of [`../study_results`](../study_results) into the numbers of the study. Standard library only
+(`scipy` is used by the self-test if it is installed).
+
+| File | Content |
+|---|---|
+| [`ext10_report.py`](ext10_report.py) | 1x budget versus the extended "ext10" budget, anytime behaviour in iteration space, paired comparison with the published RLHEA values (Wilcoxon signed-rank) |
+| [`test_report.py`](test_report.py) | Self-test of the rank test and of the iteration bookkeeping (`python3 analysis/test_report.py`) |
+
+## Reproduce
+
+```bash
+tar xzf study_results/final_1x_tuned.tar.gz -C /tmp          # -> /tmp/results_final
+tar xzf study_results/ext10_tuned.tar.gz    -C /tmp          # -> /tmp/results_extended10
+python3 analysis/ext10_report.py --base /tmp/results_final --ext /tmp/results_extended10
+python3 analysis/ext10_report.py --base /tmp/results_final --ext /tmp/results_extended10 --heldout --min-n 75   # held-out instances with n >= 75
+python3 analysis/ext10_report.py ... --out-dir report/        # also writes ext10_instances.csv and ext10_anytime_iter.csv
+```
+
+For the per-instance comparison with all published algorithms (not only RLHEA) see [`../bks/compare_published.py`](../bks/compare_published.py).
+
+## What the report contains and what it gives on the archived runs
+
+1. **Budget.** The extended runs have a CPU-time limit of 10x the 1x limit, but they ran on a node with a higher CPU time per iteration, so the
+   effective budget in iterations is smaller: median **7.38x** the iterations of the 1x run of the same seed (5-95 %: 5.28-9.84; min 4.17, max 12.09; 58 instances x 30 seeds).
+2. **Continuation check.** Same seed, same binary and flags: the extended run repeats the 1x run up to the iteration where that one stopped.
+   The best-so-far of the extended trace after the 1x iteration count equals the 1x result in **1740 / 1740** (instance, seed) pairs.
+3. **Base versus extended**, 58 instances with n >= 75 (gap in % to the best-known values of [`../bks/LLRP_BKS.csv`](../bks/LLRP_BKS.csv)):
+
+   | | best run at the BKS | mean gap of best run | mean gap of the mean | runs at the BKS |
+   |---|---|---|---|---|
+   | 1x | 21 / 58 | 0.359 | 1.707 | 8.0 % |
+   | ext10 | 29 / 58 | 0.125 | 0.588 | 21.4 % |
+
+   No instance has an extended best below the registry BKS by more than 0.01 (no new best-known values).
+4. **Anytime behaviour in iteration space** (machine independent): mean gap after f x the iterations of the 1x run, f = 0.25 ... 10; a column uses
+   only instances for which all 30 runs reached that many iterations (4.68 % at f = 0.25, 1.71 % at f = 1, 0.81 % at f = 4 over all 58 instances).
+   CPU-time slices of the extended traces are not used: the extended node is slower per iteration, so they are not comparable with the 1x runs.
+5. **Paired comparison with RLHEA** (published values of [`../bks/literature_results.csv`](../bks/literature_results.csv), other hardware and run counts;
+   differences of at most 0.005 are ties). On the 45 held-out instances with n >= 75 (`--heldout --min-n 75`) the mean of our 30 runs against the published RLHEA average:
+   win / tie / loss 0 / 4 / 41, Wilcoxon signed-rank on the 41 non-tied instances W+ = 861, W- = 0, normal approximation p = 2.4e-8 (the exact p-value is 9.1e-13);
+   best run against the published best: 0 / 21 / 24.
+   Our extended-budget results are therefore behind the published RLHEA values on the large instances; this is a statement about these runs and values, not about equal-time performance
+   (RLHEA's published times are on other hardware).
+
+All sections are deterministic functions of the archived `run.csv` / `trace.csv` files; the CI job `bks` runs the report and checks the continuation count.

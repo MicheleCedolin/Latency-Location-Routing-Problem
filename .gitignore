@@ -21,3 +21,8 @@ __pycache__/
 *.log
 *.swp
 .DS_Store
+
+# large_ablation outputs
+large_ablation/results_large*/
+large_ablation/results_full*/
+large_ablation/*.log
