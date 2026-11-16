@@ -34,3 +34,4 @@ paper/out/
 paper/__pycache__/
 paper/tests/__pycache__/
 analysis/__pycache__/
+analysis/enum_paths
