@@ -1,0 +1,5 @@
+archives: study_results/final_1x_tuned.tar.gz study_results/ext10_tuned.tar.gz
+published: true
+instances: 
+commit: 42013b87cdfefd336e3f0fb9a40556c971ee1c2f
+run: https://github.com/MicheleCedolin/Latency-Location-Routing-Problem/actions/runs/43877507750
