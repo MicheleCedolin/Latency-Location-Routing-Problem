@@ -40,6 +40,7 @@ using std::vector;
 }
 
 struct Counters { long lat = 0, dist = 0, valid = 0, samples = 0, choices = 0; } CT;
+static bool g_atmost = false;      // --atmost: at most Ng open depots (default: exactly Ng, as in the original port)
 
 // ------------------------------------------------------------------------------------------------ instance
 struct Inst {
@@ -457,7 +458,7 @@ static bool check_validity(Sol &s) {
     int nonempty = 0;
     for (auto &r : s.routes) if (!r.path.empty()) nonempty++;
     if (nonempty > G->Nv) return false;
-    if ((int)s.open.size() != G->Ng) return false;
+    if (g_atmost ? (int)s.open.size() > G->Ng : (int)s.open.size() != G->Ng) return false;
     for (auto &r : s.routes) if (!r.path.empty() && r.load > G->Q + 1e-4) return false;
     vector<char> seen(G->n, 0);
     size_t tot = 0;
@@ -602,8 +603,8 @@ static Sol ECWA(vector<int> allowed, int rcl_size) {
         sol.routes.push_back(nr);
     }
     repair_route_count_by_relocation(sol);
-    // force exactly Ng depots
-    {
+    // force exactly Ng depots (not in --atmost mode)
+    if (!g_atmost) {
         int req = I.Ng;
         std::set<int> used;
         for (auto &r : sol.routes) if (!r.path.empty()) used.insert(r.depot);
@@ -645,6 +646,32 @@ static bool g_random = true;       // neighbourhood order: true = RVND (random o
 static bool g_check = false;       // debugging: verify every accepted move against a from-scratch evaluation
 static double g_beta = 0.0;        // current penalty weight (SO)
 static const double EPS_IMP = 1e-6;
+
+// granular neighbourhoods (--gran D, after Toth & Vigo 2003; D = 0 switches them off and leaves every result unchanged).  For every customer the D
+// nearest customers are listed (ties by index); a move between two routes is evaluated only if it creates at least one edge between two customers
+// that are neighbours in this sense (symmetric: u in N(v) or v in N(u)) or an edge that touches a depot.  Moves inside one route and the depot-level
+// operators are not restricted.  swapstar considers a pair (a, b) only if a and b are neighbours.
+static int g_gran = 0;
+static int g_nn = 0;
+static vector<unsigned char> g_near;
+static inline bool nearc(int u, int v) { return u < 0 || v < 0 || g_near[(size_t)u * g_nn + v] != 0; }   // -1 = depot
+static void build_gran(const Inst &I, int delta) {
+    const int n = I.n, m = I.m;
+    g_nn = n;
+    if (delta <= 0 || delta >= n - 1) { g_gran = 0; g_near.clear(); return; }      // D >= n-1: every customer is a neighbour, nothing to restrict
+    g_gran = delta;
+    g_near.assign((size_t)n * n, 0);
+    vector<int> idx;
+    for (int c = 0; c < n; c++) {
+        idx.clear();
+        for (int o = 0; o < n; o++) if (o != c) idx.push_back(o);
+        std::sort(idx.begin(), idx.end(), [&](int a, int b) {
+            const double da = I.d(m + c, m + a), db = I.d(m + c, m + b);
+            return da < db || (da == db && a < b);
+        });
+        for (int k = 0; k < delta; k++) { g_near[(size_t)c * n + idx[k]] = 1; g_near[(size_t)idx[k] * n + c] = 1; }
+    }
+}
 
 static inline double ovalue(double lat, double load) {
     if (!g_so) return lat;
@@ -816,12 +843,15 @@ static void op_oropt(const State &S, Best &B, long &ev, int k) {
                     const double l2 = Bt.load + sl;
                     if (!okload(l2, Bt.load)) continue;
                     const double rest = v1 - S.base[r1] - S.base[r2];
-                    for (int rev = 0; rev <= (k > 1 ? 1 : 0); rev++)
+                    for (int rev = 0; rev <= (k > 1 ? 1 : 0); rev++) {
+                        const int gf = rev ? A.p[i + k - 1] : A.p[i], gl = rev ? A.p[i] : A.p[i + k - 1];      // first / last customer of the moved segment
                         for (int p = 0; p <= Bt.L; p++) {
+                            if (g_gran && !(nearc(p > 0 ? Bt.p[p - 1] : -1, gf) || nearc(gl, p < Bt.L ? Bt.p[p] : -1))) continue;
                             Rec rb; rb.depot = Bt.depot; rb.add(r2, 0, p - 1); rb.add(r1, i, i + k - 1, rev); rb.add(r2, p, Bt.L - 1);
                             ev++;
                             OFFER(rest + ovalue(rec_lat(S, rb), l2), mk2(r1, ra, r2, rb));
                         }
+                    }
                 }
             }
             for (int rev = 0; rev <= (k > 1 ? 1 : 0); rev++)                           // ---- inside the route
@@ -852,6 +882,12 @@ static void op_exch(const State &S, Best &B, long &ev, int k1, int k2) {
                     if (!okload(l1, A.load) || !okload(l2, Bt.load)) continue;
                     for (int rv1 = 0; rv1 <= (k1 > 1 ? 1 : 0); rv1++)
                         for (int rv2 = 0; rv2 <= (k2 > 1 ? 1 : 0); rv2++) {
+                            if (g_gran) {                                                    // four new joints: both ends of both moved segments
+                                const int s1f = rv1 ? A.p[i + k1 - 1] : A.p[i], s1l = rv1 ? A.p[i] : A.p[i + k1 - 1];
+                                const int s2f = rv2 ? Bt.p[j + k2 - 1] : Bt.p[j], s2l = rv2 ? Bt.p[j] : Bt.p[j + k2 - 1];
+                                if (!(nearc(i > 0 ? A.p[i - 1] : -1, s2f) || nearc(s2l, i + k1 < A.L ? A.p[i + k1] : -1) ||
+                                      nearc(j > 0 ? Bt.p[j - 1] : -1, s1f) || nearc(s1l, j + k2 < Bt.L ? Bt.p[j + k2] : -1))) continue;
+                            }
                             Rec ra; ra.depot = A.depot; ra.add(r1, 0, i - 1); ra.add(r2, j, j + k2 - 1, rv2); ra.add(r1, i + k1, A.L - 1);
                             Rec rb; rb.depot = Bt.depot; rb.add(r2, 0, j - 1); rb.add(r1, i, i + k1 - 1, rv1); rb.add(r2, j + k2, Bt.L - 1);
                             ev++;
@@ -901,6 +937,7 @@ static void op_2optstar(const State &S, Best &B, long &ev) {
                     if (i == A.L && j == Bt.L) continue;                  // identity
                     if (i == 0 && j == Bt.L) continue;                    // first route would be empty
                     if (j == 0 && i == A.L) continue;                     // second route would be empty
+                    if (g_gran && !(nearc(i > 0 ? A.p[i - 1] : -1, j < Bt.L ? Bt.p[j] : -1) || nearc(j > 0 ? Bt.p[j - 1] : -1, i < A.L ? A.p[i] : -1))) continue;
                     const double l1 = A.P[i] + (Bt.load - Bt.P[j]), l2 = Bt.P[j] + (A.load - A.P[i]);
                     if (!okload(l1, A.load) || !okload(l2, Bt.load)) continue;
                     Rec ra; ra.depot = A.depot; ra.add(r1, 0, i - 1); ra.add(r2, j, Bt.L - 1);
@@ -925,6 +962,7 @@ static void op_swapstar(const State &S, Best &B, long &ev) {
             for (int i = 0; i < A.L; i++) {
                 const double da = G->dem[A.p[i]];
                 for (int j = 0; j < Bt.L; j++) {
+                    if (g_gran && !nearc(A.p[i], Bt.p[j])) continue;
                     const double db = G->dem[Bt.p[j]];
                     const double l1 = A.load - da + db, l2 = Bt.load - db + da;
                     if (!okload(l1, A.load) || !okload(l2, Bt.load)) continue;
@@ -1266,7 +1304,7 @@ static Sol ECWA_fast(vector<int> allowed, int rcl_size) {
     for (auto &r : rs) { Route o; o.depot = r.depot; o.path = r.path; o.load = r.load; sol.routes.push_back(o); }
     calculate_cost(sol);
     repair_route_count_by_relocation(sol);
-    {
+    if (!g_atmost) {
         int req = I.Ng;
         std::set<int> used;
         for (auto &r : sol.routes) if (!r.path.empty()) used.insert(r.depot);
@@ -1299,11 +1337,17 @@ static vector<int> initial_allowed(bool div_mode, const vector<int> &best_depots
     if (div_mode || best_depots_div.empty()) {
         vector<int> pop(I.m);
         for (int i = 0; i < I.m; i++) pop[i] = i;
-        res = RNG.sample(pop, max_open);
+        int k = max_open;
+        if (g_atmost && max_open > 1) {                                  // at most Ng: the number of candidate depots is drawn uniformly from 1..Ng
+            vector<int> ks(max_open);
+            for (int i = 0; i < max_open; i++) ks[i] = i + 1;
+            k = RNG.sample(ks, 1)[0];
+        }
+        res = RNG.sample(pop, k);
     } else {
         vector<int> depots = best_depots_div;
         if ((int)depots.size() > max_open) depots = RNG.sample(depots, max_open);
-        else if ((int)depots.size() < max_open) {
+        else if ((int)depots.size() < max_open && !g_atmost) {
             vector<int> missing;
             for (int d = 0; d < I.m; d++) if (std::find(depots.begin(), depots.end(), d) == depots.end()) missing.push_back(d);
             vector<int> add = RNG.sample(missing, max_open - (int)depots.size());
@@ -1472,6 +1516,7 @@ int main(int argc, char **argv) {
     int max_iter = 1000, stall = 0, rcl = 5;
     double tlimit = 0.0;
     bool quiet = false, pyrng = true, add_ds = false, list_ops = false, construct_only = false;
+    int gran_arg = 0;
     for (int i = 1; i < argc; i++) {
         string a = argv[i];
         auto val = [&]() -> string { if (i + 1 >= argc) die("missing value for " + a); return argv[++i]; };
@@ -1486,6 +1531,8 @@ int main(int argc, char **argv) {
         else if (a == "--stall") stall = atoi(val().c_str());
         else if (a == "--time") tlimit = atof(val().c_str());
         else if (a == "--ils") g_ils = atoi(val().c_str());
+        else if (a == "--gran") gran_arg = atoi(val().c_str());
+        else if (a == "--atmost") g_atmost = true;
         else if (a == "--rcl") rcl = atoi(val().c_str());
         else if (a == "--it-div") g_it_div = atoi(val().c_str());
         else if (a == "--it-int") g_it_int = atoi(val().c_str());
@@ -1531,6 +1578,8 @@ int main(int argc, char **argv) {
     }
     Inst I = read_instance(inst_path);
     G = &I;
+    if (gran_arg < 0) die("--gran must be >= 0");
+    build_gran(I, gran_arg);
     RNG.gen.seed((unsigned long long)seed);
     if (pyrng) { RNG.pyrng = true; RNG.mt.seed((unsigned long long)seed); }
 
@@ -1554,6 +1603,8 @@ int main(int argc, char **argv) {
            I.name.c_str(), algo.c_str(), seed, best.cost, feas ? 1 : 0, RI.iters, RI.stop.c_str(), RI.last_impr_iter, cpu, wall);
     printf("params rcl=%d it_div=%d it_int=%d so=%d so_win_up=%d so_win_down=%d so_f1=%.17g so_f2=%.17g beta_min=%.17g beta_max=%.17g beta0_scale=%.17g ils=%d select=%s order=%s ops=%s\n",
            rcl, g_it_div, g_it_int, g_so ? 1 : 0, g_win_up, g_win_down, g_so_f1, g_so_f2, g_beta_min, g_beta_max, g_beta0_scale, g_ils, select.c_str(), order.c_str(), pool_names.c_str());
+    if (g_gran > 0) printf("gran %d\n", g_gran);
+    if (g_atmost) printf("atmost 1\n");
     if (!out_prefix.empty()) write_outputs(out_prefix, I, best, feas, RI, algo, seed, cpu, wall);
     if (!quiet) {
         for (auto &r : best.routes) {

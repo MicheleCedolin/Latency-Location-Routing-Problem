@@ -1,0 +1,20 @@
+#!/bin/bash
+#$ -S /bin/bash
+#$ -cwd
+#$ -V
+#$ -N LLRPEXT
+#$ -pe smp 16-30
+#$ -j y
+#$ -o extended_sge.log
+# Extended-budget evaluation (run_extended.sh) on ONE node.  From the cpp/ folder:
+#   PLAN_ONLY=1 INSTLIST=ext10_instances.txt TC=300 ./run_extended.sh                          # time estimate first
+#   SCRATCH=1 INSTLIST=ext10_instances.txt TC=300 TAG=ext10 OUT=results_extended10 qsub run_extended.sge   # submit (variables are passed with -V)
+#   SCRATCH=1 writes the run files to the node's local disk ($TMPDIR); see the header of run_extended.sh
+cd "${SGE_O_WORKDIR:-$PWD}" || exit 1
+export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
+echo "host $(hostname) | NSLOTS=${NSLOTS:-?} | job ${JOB_ID:-none} | INSTLIST=${INSTLIST:-} BUDGET_FILE=${BUDGET_FILE:-} TC=${TC:-30} SCRATCH=${SCRATCH:-0} TMPDIR=${TMPDIR:-} SEEDS=${SEEDS:-30} SEED0=${SEED0:-1} | $(date)"
+echo "load (uptime): $(uptime)"
+./run_extended.sh
+rc=$?
+echo "extended finished: exit code $rc | $(date)"
+exit $rc

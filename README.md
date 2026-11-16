@@ -13,6 +13,7 @@ Problem definition: [`python/FORMULATION_LLRP.md`](python/FORMULATION_LLRP.md).
 | Folder | Content |
 |---|---|
 | [`cpp/`](cpp) | **Main code.** `llrp_fast` (GRASP + RVND, 14 operators, strategic oscillation, depot swap) and `llrp_tools` (experiment orchestration, ablation, irace set-up, verification, statistics). C++11 only. Includes the 76 instances in `inst/`, the tuned configuration `irace/best.flags` and all run scripts. → [`cpp/README.md`](cpp/README.md) |
+| [`study_results/`](study_results) | Raw result files of the study: final evaluation at the 1x and the 10x ("ext10") CPU budget, the `--atmost` check, the irace log. → [`study_results/README.md`](study_results/README.md) |
 | [`bks/`](bks) | `LLRP_BKS.csv`: best-known value, bounds and verification status of every instance. → [`bks/README.md`](bks/README.md) |
 | [`python/`](python) | Python heuristic laboratory (17 campaign metaheuristics, delta-evaluating local search, adaptive depot layer, SGE launcher, 120 unit tests) with the raw instance files and the registry of the 76 instances. → [`python/README.md`](python/README.md) |
 | [`.github/workflows/`](.github/workflows) | `ci.yml` (build + self-check + unit tests) and `experiment.yml` (manually triggered experiments on GitHub runners). |
@@ -77,9 +78,10 @@ and a single job is limited to 6 hours, so the Tüzün family should be run with
 
 ## Reproducibility notes
 
-* Results of the study were produced with the scripts in `cpp/` (`run_config.sh`, `run_ablation.sh`, `run_irace.sh`, `run_final.sh`) on an SGE cluster (30 cores per job, one process per seed).
+* Results of the study were produced with the scripts in `cpp/` (`run_config.sh`, `run_ablation.sh`, `run_irace.sh`, `run_final.sh`, `run_extended.sh`) on an SGE cluster (30 cores per job, one process per seed); the raw result files are in [`study_results/`](study_results).
 * The tuned configuration is stored in [`cpp/irace/best.flags`](cpp/irace/best.flags); the irace set-up (27 parameters, 17 training instances, `time` budget mode) is in `cpp/irace/` and is re-created by `cpp/run_irace.sh`.
-* `cpp/selfcheck.sh` and the CI workflow check move evaluation against full recomputation, the independent solution verifier, determinism and the experiment tool chain.
+* `cpp/selfcheck.sh` and the CI workflow check move evaluation against full recomputation, the independent solution verifier, determinism, the experiment tool chain and the `--atmost` mode.
+* The solver option `--atmost` (at most `Ng` open depots instead of exactly `Ng`) is used in the manuscript for one instance only (Prins `50-5-2BIS-5`); all other results use the default.
 
 ## References
 

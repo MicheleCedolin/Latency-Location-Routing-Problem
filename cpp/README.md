@@ -12,7 +12,7 @@ operator-ablation study: family-wise experiment runner, leave-one-out / add-one-
 
 ```bash
 ./build.sh          # bin/llrp_fast (solver) + bin/llrp_tools (analysis / orchestration);  -O3 -ffp-contract=off, no -march=native
-./selfcheck.sh      # a few seconds on one core: --check, independent verifier, corrupted-file rejection, determinism, run_config/merge, irace dry run
+./selfcheck.sh      # a few seconds on one core: --check, independent verifier, corrupted-file rejection, determinism, run_config/merge, irace dry run, --atmost
                     # it must end with "SELFCHECK: ALL OK" before you start a long run
 
 # one short run on one instance
@@ -28,7 +28,7 @@ The code compiles cleanly with `-std=c++11 -pedantic-errors` and with clang; it 
 
 | Path | Content |
 |---|---|
-| `src/llrp_fast.cpp` | Solver: GRASP + RVND, 14 operators, strategic oscillation (SO), depot swap `ds`, stopping rules, per-operator CPU / benefit counters |
+| `src/llrp_fast.cpp` | Solver (v5): GRASP + RVND, 14 operators, strategic oscillation (SO), depot swap `ds`, stopping rules, per-operator CPU / benefit counters; optional `--atmost` (at most `Ng` open depots) and `--gran D` (granular neighbourhoods, experimental) |
 | `src/llrp_tools.cpp` (+ `cmd_*.hpp`, `tools_*.hpp`) | Tools: `manifest select merge check-csv summarize compare ablation calibrate verify workbook irace-gen irace-flags irace-sample selftest wilcoxon` (`bin/llrp_tools` prints the usage) |
 | `inst/{barreto,tuzun,prins}/*.inst` | The 76 instances in one text format (see below) |
 | `manifest.tsv` | Per instance: n, m, Q, Nv, Ng, BKS, total demand, tightness, size class, flag |
@@ -37,6 +37,9 @@ The code compiles cleanly with `-std=c++11 -pedantic-errors` and with clang; it 
 | `run_ablation.sh` | FULL + leave-one-out + add-one-in, one result directory per family |
 | `run_irace.sh`, `irace/` | irace scenario, parameter file (27 parameters), `target-runner`, initial configurations, `best.flags` (tuned configuration) |
 | `run_final.sh` | Final evaluation: tuned configuration on all instances x 30 seeds with the irace CPU-time budget, verified and replay-checked |
+| `run_extended.sh`, `run_extended.sge`, `ext10_instances.txt` | Extended-budget evaluation (same flags, seeds and binary as `run_final.sh`, other instance list and CPU budget): the study's "ext10" setting = 10 x the 1x budget on the 58 instances with n >= 75; optional node-local scratch directory (`SCRATCH=1`) |
+| `irace/atmost.flags` | `irace/best.flags` + `--atmost` (used for Prins `50-5-2BIS-5` only) |
+| [`../study_results/`](../study_results) | Raw result files of the study (1x and ext10 final evaluation, `--atmost` check, irace log) |
 | `irace_dryrun.sh` | Exercises the target-runner chain without irace |
 | `*.sge`, `setup_irace_env.sh` | Job scripts for an SGE cluster and a root-less R + irace installation (micromamba) |
 | `data/` | `timing_probe_20it.tsv` (CPU time of 20 iterations on every instance), `inst_validation_published_solutions.txt`, pilot experiments (`pilot_stall_calibration`, `pilot_ils_probe`) |
@@ -137,6 +140,13 @@ PLAN_ONLY=1 ./run_final.sh                           # time estimate for the fin
   They belong to the test set. `selection/train.txt` is fixed; do not re-run `llrp_tools select` unless you intend to change it.
 * **Final evaluation budget:** CPU limit `max(5, 30·n/100)` s per run, no iteration cap, no stall rule; the limit is checked at the end of a GRASP iteration, so a run may exceed it by at most one iteration. Seeds 1..30. Flags, budget, binary and manifest SHA-256 are stored in `env.txt`.
   A time-limited run is reproduced exactly by giving the `iterations` value of its log as `--max-iter` (`REPLAY=n` checks n sample runs automatically).
+* **Extended budget ("ext10").** `run_extended.sh` repeats the final evaluation with a larger CPU limit and its own instance list, with the same flags, seeds `1..30` and binary:
+  `PLAN_ONLY=1 INSTLIST=ext10_instances.txt TC=300 ./run_extended.sh` prints the time estimate; `SCRATCH=1 INSTLIST=ext10_instances.txt TC=300 TAG=ext10 OUT=results_extended10 ./run_extended.sh` runs it
+  (budget `max(5, TC·n/100)` s, i.e. `3n` s for TC = 300 = 10 x the 1x budget; `BUDGET_FILE=<file with lines "instance seconds">` gives explicit budgets; `qsub run_extended.sge` submits it to an SGE queue).
+  The ext10 list contains the 58 instances with n >= 75 (57 with n >= 100 plus Ch75-10).
+* **`--atmost`.** The problem definition allows *at most* `Ng` open depots, while the default of `llrp_fast` opens exactly `Ng` (every earlier result was produced this way). With `--atmost` the solution is valid with 1..`Ng` open depots,
+  the "force exactly `Ng`" steps are skipped and the GRASP diversification draws the number of candidate depots uniformly from 1..`Ng`; `llrp_tools verify` accepts both. Without the flag the behaviour is bit-identical to v4.
+  The manuscript uses it for one instance, Prins `50-5-2BIS-5` (30/30 runs reach the BKS 945.45187; default: 949.10): `FAMILY=custom FLAGS_FILE=irace/atmost.flags TAG=atmost ./run_final.sh 50-5-2BIS-5`.
 
 ## 6. Time estimates (30 seeds = 30 cores, 2.1 GHz Xeon, from `data/timing_probe_20it.tsv`; ± 30 %)
 
@@ -156,6 +166,7 @@ Reducing the number of seeds (e.g. `NPROC=10`) does not shorten the wall time, o
 * `--check`: every move evaluation is compared with a full recomputation before the move is applied (mismatch → exit code 3). `llrp_tools verify` recomputes distances, arrival times, latency, load, customer partition and the number of routes/depots from the routes;
   deliberately corrupted route files (swapped order, dropped customer, wrong depot) are rejected.
 * The default values of all tunable constants (`--it-div 5 --it-int 3 --so-win-up 4 --so-win-down 4 --so-f1 1.5 --so-f2 2.5 --beta0-scale 1`) reproduce the behaviour before they became flags bit for bit (`selfcheck.sh`, step 3).
+* `selfcheck.sh` step 6 runs `--atmost --check` and the verifier on Prins `50-5-2BIS-5` (the default exactly-`Ng` mode is checked there as well).
 * The C++ tools (`summarize`, `compare`, `calibrate`, `ablation`, `workbook`) were cross-checked against an earlier Python implementation (numerically identical, Excel cell by cell); Python is not part of this package.
 * Same seed + same binary ⇒ same result. Bit-identity across compilers or CPUs is not guaranteed; `env.txt` records the binary SHA-256, node and CPU model — compare results only for the same binary.
 
@@ -164,7 +175,8 @@ Reducing the number of seeds (e.g. `NPROC=10`) does not shorten the wall time, o
 * O(1) move evaluation by sub-sequence concatenation (Silva, Subramanian, Vidal, Ochi 2012); per-route forward/reversed tables are rebuilt in O(L²); every move is a "recipe" of at most six route pieces shared by evaluation and application.
 * 14 operators: `relocate, oropt2, oropt3, swap11, swap21, swap22, swap31, swap32, 2opt, 2opt*, swapstar, dexch, rdepot, ds` (only `ds` changes the set of open depots). Presets: `zou` (8), `legacy5` (5), `full` (14).
 * ECWA construction with O(1) merge evaluation. SO objective: latency + β·max(0, load − Q) with adaptive β; GRASP depot-set cycle of 5 diversification + 3 intensification iterations, RCL size 5.
-* Not implemented (possible extension): δ-nearest granular neighbourhoods of Zou et al. (2024) (δ = 20 in their tuned setting).
+* Granular neighbourhoods (`--gran D`, after Toth & Vigo 2003; default 0 = off): between-route moves are evaluated only if they create an edge between neighbouring customers (the `D` nearest, symmetric) or an edge at a depot;
+  `swapstar` pairs are restricted likewise. This is an implemented but **untested** extension (no results are reported with it); Zou et al. (2024) use δ = 20 in their tuned setting.
 
 ## 9. Limitations
 

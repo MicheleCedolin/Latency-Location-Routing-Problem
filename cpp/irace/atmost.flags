@@ -1,0 +1,1 @@
+--ops relocate,oropt2,swap11,swap21,2optstar,swapstar,dexch,rdepot,ds --so --rcl 8 --it-div 9 --it-int 5 --select first --order random --so-win-up 6 --so-win-down 4 --so-f1 1.5636 --so-f2 2.068 --beta0-scale 1.1026 --ils 10 --atmost
