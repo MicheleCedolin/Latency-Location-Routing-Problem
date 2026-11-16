@@ -1,0 +1,19 @@
+# Phase A (baseline-standardized, V12.1): heuristic  local_search  neighborhoods
+# first-improvement native LS only for the six methods that need an improvement phase; no common VND.
+grasp   first  baseline_route
+ils     first  baseline_route
+vns     first  baseline_route
+sa      none   none
+tabu    none   none
+ga      none   none
+alns    none   none
+msls    first  baseline_route
+lns     none   none
+brkga   none   none
+aco     none   none
+ta      none   none
+ig      none   none
+scatter first  baseline_route
+pso     none   none
+de      none   none
+rkrs    none   none

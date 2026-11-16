@@ -1,0 +1,14 @@
+#!/bin/bash
+#$ -S /bin/bash
+#$ -cwd
+#$ -V
+#$ -N LLRP_ABL
+#$ -pe smp 15
+#$ -o logs/
+#$ -e logs/
+# Post-hoc LS (VND) ablation of a finished campaign, see hpc/ablation.sh and ABLATION.md.
+# Usage (run from the LLRP folder, after `mkdir -p logs`); use colons inside a value, qsub -v splits variables on commas:
+#   qsub -v RUN=analysis/phaseA_P50_120s_30seeds,STAGE=0:1,SEEDS=1-10 hpc/submit_ablation.sge
+#   qsub -v RUN=analysis/phaseA_P50_120s_30seeds,STAGE=2,KEEP=ABCDE,SEEDS=1-10 hpc/submit_ablation.sge
+#   qsub -v RUN=analysis/phaseA_P50_120s_30seeds,STAGE=3:4,SET=classes:ABCDE,SEEDS=1-10 hpc/submit_ablation.sge
+bash hpc/ablation.sh

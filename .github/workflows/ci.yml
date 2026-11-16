@@ -1,0 +1,49 @@
+name: CI
+
+# Build, self-check of the C++ engine and unit tests of the Python kit.
+# Runs on every push / pull request; takes a few minutes.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  cpp:
+    name: C++ build + selfcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (llrp_fast, llrp_tools)
+        working-directory: cpp
+        run: ./build.sh
+      - name: Strict C++11 syntax check
+        working-directory: cpp
+        run: |
+          g++ -std=c++11 -pedantic-errors -Wall -fsyntax-only src/llrp_fast.cpp
+          g++ -std=c++11 -pedantic-errors -fsyntax-only src/llrp_tools.cpp
+      - name: Selfcheck (--check, verifier, determinism, run_config/merge, irace dry run)
+        working-directory: cpp
+        run: ./selfcheck.sh
+      - name: Instance data check
+        working-directory: cpp
+        run: ./check_inst_data.sh
+
+  python:
+    name: Python kit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install optional dependencies (numpy, scipy)
+        run: python -m pip install numpy scipy
+      - name: Unit tests
+        working-directory: python
+        run: python -I -m unittest discover -s tests
+      - name: Launcher smoke tests
+        working-directory: python
+        run: |
+          bash tests/smoke_hpc.sh
+          bash tests/smoke_shards.sh

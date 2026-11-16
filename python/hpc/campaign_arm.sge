@@ -1,0 +1,33 @@
+#!/bin/bash
+#$ -S /bin/bash
+#$ -cwd
+#$ -N LLRP_arm
+#$ -pe smp 15
+#$ -o logs/
+#$ -e logs/
+# One arm of a sharded stage = one task of an SGE array job (task i+1 of 1..ARMS runs arm i). Submitted by hpc/submit_llrp_campaign.sh with
+# `-v STAGE_ENV=<stage folder>/stage.env`; that file holds the stage: INSTANCES, TIME_LIMIT, NSEEDS, METHODS_FILE, CHECKPOINTS, OUT, ARMS, ORDER, ONLY, EXTRA_ARGS, REQUIRE_OK.
+# No `qsub -V`: the job does not depend on the environment of the submitting shell (Python/conda is found by hpc/pyenv.sh).
+# The 15 worker processes of the arm come from the PE slots (NSLOTS).
+# By hand (no SGE):  STAGE_ENV=<file> ARM=2 bash hpc/campaign_arm.sge     or      ARM=2 ARMS=6 INSTANCES=P20 ... bash hpc/campaign_arm.sge
+#   REQUIRE_OK=<file>  gate: the arm stops (exit 1) unless this file exists, e.g. the FINALIZE_OK of the previous stage
+set -u
+if [ -n "${STAGE_ENV:-}" ]; then
+    [ -f "$STAGE_ENV" ] || { echo "ERROR: STAGE_ENV file not found: $STAGE_ENV"; exit 2; }
+    . "$STAGE_ENV" || exit 2
+fi
+ARMS="${ARMS:-6}"
+if [ -z "${ARM:-}" ]; then
+    case "${SGE_TASK_ID:-undefined}" in
+        ''|undefined|*[!0-9]*) echo "ERROR: not an array task (SGE_TASK_ID='${SGE_TASK_ID:-}') and ARM is not set"; exit 2 ;;
+        *) ARM=$(( 10#$SGE_TASK_ID - 1 )) ;;
+    esac
+fi
+if [ -n "${REQUIRE_OK:-}" ] && [ ! -f "$REQUIRE_OK" ]; then
+    echo "GATE: $REQUIRE_OK does not exist, so the previous stage was not finalized successfully. This arm does not start."
+    exit 1
+fi
+echo "arm $ARM of $ARMS | host $(hostname) | NSLOTS=${NSLOTS:-?} | job ${JOB_ID:-none}.${SGE_TASK_ID:-none} | OUT=${OUT:-?}"
+export INSTANCES TIME_LIMIT NSEEDS METHODS_FILE CHECKPOINTS OUT ORDER ONLY EXTRA_ARGS
+export SHARD="$ARM/$ARMS"
+bash hpc/run.sh

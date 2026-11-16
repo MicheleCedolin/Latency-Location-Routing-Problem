@@ -1,0 +1,13 @@
+#!/bin/bash
+#$ -S /bin/bash
+#$ -cwd
+#$ -V
+#$ -N LLRP_POST
+#$ -pe smp 15
+#$ -o logs/
+#$ -e logs/
+# Post-analysis of a finished campaign (common local search on every method + ranking statistics), see hpc/post_analysis.sh.
+# Usage (run from the LLRP folder, after `mkdir -p logs`):
+#   qsub -v RUN=analysis/phaseA_P50_120s_30seeds,PRESETS=common5:hgamp hpc/submit_post.sge
+# Use colons inside a value (qsub -v splits variables on commas). To run after a campaign job:  qsub -hold_jid <jobid> -v ... hpc/submit_post.sge
+bash hpc/post_analysis.sh

@@ -1,0 +1,23 @@
+# build products
+cpp/bin/
+*.o
+
+# experiment output (reproducible from the scripts; attach as workflow artifacts instead)
+results/
+cpp/results*/
+cpp/analysis/
+cpp/irace/irace.Rdata
+cpp/irace/irace_stdout.txt
+cpp/irace/trlog.txt
+cpp/irace/*.log
+python/analysis/
+python/logs/
+
+# python
+__pycache__/
+*.pyc
+
+# misc
+*.log
+*.swp
+.DS_Store

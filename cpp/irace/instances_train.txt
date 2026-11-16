@@ -1,0 +1,17 @@
+barreto/Ch50-5.inst
+barreto/Ch75-10.inst
+barreto/Gaskell21-5.inst
+barreto/Mi134-8.inst
+barreto/Or117-14.inst
+tuzun/P112112-10.inst
+tuzun/P113222-20.inst
+tuzun/P122212-10.inst
+tuzun/P123122-20.inst
+tuzun/P132122-20.inst
+tuzun/P132212-10.inst
+prins/20-5-1-5.inst
+prins/50-5-1b-5.inst
+prins/100-5-3b-5.inst
+prins/100-10-2-10.inst
+prins/200-10-1b-10.inst
+prins/200-10-2b-10.inst
