@@ -86,3 +86,11 @@ A file is used only if it covers every customer once and its latency, recomputed
 On the 1x archive the classes of all 2190 runs on the remaining 73 instances equal those of the analysis of the study (A 25.7 %, B 34.2 %, C 13.6 %, D 5.8 %, E 20.8 % of the runs;
 the mean gap to the BKS falls from 3.7 % in class A to 0.8 / 0.4 / 0.01 / 0.00 % in B / C / D / E; 562 / 748 / 298 / 127 / 455 runs). On the ext10 archive the same 73-instance rule leaves out one instance more
 than the study did, Tuzun P112222-20, which the study included with a repaired solution file.
+
+## Edge structure of the published solutions
+
+| script | question |
+|---|---|
+| `edge_granularity.py` | neighbour rank (k-NN) of every route edge of the published solutions of Zou et al. and of ours; which published edges our runs never use |
+| `edge_candidates.py` | coverage of the published edges by candidate edge sets (k-NN, union of the edges of m runs) versus their size |
+| `backbone_sp.py` + `enum_paths.cpp` | routes that can be built from the edges shared by many runs (frequency threshold) versus the pool of the runs' own routes; optional set partitioning. Workflow `Backbone` |
