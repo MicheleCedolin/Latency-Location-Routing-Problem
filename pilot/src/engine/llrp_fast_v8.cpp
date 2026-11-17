@@ -1365,7 +1365,10 @@ static Sol construct(const vector<int> &allowed, int rcl) { return g_ecwa_ref ? 
 //                       intensification phase refines); that set (and the open set of the best intensification solution) goes on a tabu list for the rest of the run.
 //                       Later start-set draws skip tabu sets (top-K and uniform draws); when the diversification phase of a later cycle ends on a tabu set,
 //                       its intensification phase is skipped.  Not combinable with --dpm-memory.
+//   --dpm-tabu-parts P  v8 (EXPERIMENTAL): with --dpm-tabu, which of the two rules is active: draw (start-set draws avoid tabu sets; intensification is never skipped),
+//                       skip (draws unchanged; intensification skipped when the diversification phase ends on a tabu set) or both (default = plain --dpm-tabu).
 static bool g_dpm_prune = false, g_dpm_mem = false, g_dpm_tabu = false;
+static bool g_tabu_draw = true, g_tabu_skip = true, g_tabu_parts_set = false;    // v8: parts of --dpm-tabu (default both); --dpm-tabu-parts draw|skip|both
 static int g_dpm_K = 0;
 static double g_dpm_eps = 0.25;
 static long g_dpm_cap = 200000;                       // largest number of subsets that is enumerated
@@ -1493,7 +1496,7 @@ static vector<int> initial_allowed(bool div_mode, const vector<int> &best_depots
     int max_open = std::max(1, std::min(I.Ng, I.m));
     vector<int> res;
     if (DP.on && (div_mode || best_depots_div.empty())) {
-        res = g_dpm_tabu ? dpm_draw_tabu(incumbent) : dpm_draw(incumbent);
+        res = (g_dpm_tabu && g_tabu_draw) ? dpm_draw_tabu(incumbent) : dpm_draw(incumbent);
         RNG.order('A', res);
         return res;
     }
@@ -1740,7 +1743,7 @@ static Sol run_grasp(int max_iter, int stall, double tlimit, int alpha_max, RunI
         }
         period++;
         if (div_mode && period >= max_it_div) {
-            if (g_dpm_tabu && have_div && tabu_has(best_depots_div)) {       // v8: the cycle converged on an already converged set -> no intensification
+            if (g_dpm_tabu && g_tabu_skip && have_div && tabu_has(best_depots_div)) {       // v8: the cycle converged on an already converged set -> no intensification
                 TB.skipped_int++; TB.cycles++;
                 TB.events.push_back({k, string("skip_int:") + set_text(best_depots_div)});
                 period = 0; best_depots_div.clear(); have_div = false; best_cost_div = INFINITY;
@@ -1882,6 +1885,13 @@ int main(int argc, char **argv) {
         else if (a == "--dpm-prune") { g_dpm_prune = true; dpm_requested = true; }
         else if (a == "--dpm-memory") { g_dpm_mem = true; dpm_requested = true; }
         else if (a == "--dpm-tabu") { g_dpm_tabu = true; dpm_requested = true; }
+        else if (a == "--dpm-tabu-parts") {
+            string v = val(); g_tabu_parts_set = true;
+            if (v == "draw") { g_tabu_draw = true; g_tabu_skip = false; }
+            else if (v == "skip") { g_tabu_draw = false; g_tabu_skip = true; }
+            else if (v == "both") { g_tabu_draw = true; g_tabu_skip = true; }
+            else die("--dpm-tabu-parts must be draw, skip or both");
+        }
         else if (a == "--pr-elite") g_pr_elite = atoi(val().c_str());
         else if (a == "--dpm-cap") g_dpm_cap = atol(val().c_str());
         else if (a == "--pool-sp") g_pool_on = true;
@@ -1942,6 +1952,7 @@ int main(int argc, char **argv) {
         if (g_atmost) die("--dpm-* cannot be combined with --atmost");
         if (g_dpm_K < 0 || g_dpm_eps < 0.0 || g_dpm_eps > 1.0) die("--dpm-rank K[,eps]: K >= 0 and 0 <= eps <= 1");
         if (g_dpm_tabu && g_dpm_mem) die("--dpm-tabu cannot be combined with --dpm-memory");
+        if (g_tabu_parts_set && !g_dpm_tabu) die("--dpm-tabu-parts needs --dpm-tabu");
         dpm_build(I);
     }
     if (g_pr_elite < 0) die("--pr-elite E: E >= 0");
@@ -1990,7 +2001,7 @@ int main(int argc, char **argv) {
         }
     }
     if (g_dpm_tabu) {
-        printf("tabu on=1 cycles=%ld adds=%ld skipped_int=%ld draw_skips=%ld resets=%ld size_end=%ld\n", TB.cycles, TB.adds, TB.skipped_int, TB.draw_skips, TB.resets, TB.count);
+        printf("tabu on=1 cycles=%ld adds=%ld skipped_int=%ld draw_skips=%ld resets=%ld size_end=%ld draw=%d skip=%d\n", TB.cycles, TB.adds, TB.skipped_int, TB.draw_skips, TB.resets, TB.count, g_tabu_draw ? 1 : 0, g_tabu_skip ? 1 : 0);
         if (!out_prefix.empty()) {
             FILE *g = fopen((out_prefix + ".tabu.csv").c_str(), "w");
             if (g) { fprintf(g, "Instance,Seed,iter,event\n"); for (auto &e : TB.events) fprintf(g, "%s,%lld,%d,%s\n", I.name.c_str(), seed, e.first, e.second.c_str()); fclose(g); }

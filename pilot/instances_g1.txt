@@ -1,0 +1,8 @@
+# G1: the 7 instances where B1 lags RLHEA (f_avg) most in the B1 campaign (sum of positive differences: 87 %); P111122-20 = discovery instance (replication), the other 6 = test
+P111122-20
+P122112-10
+P121112-10
+P122212-10
+P121212-10
+P123112-10
+P122122-20
