@@ -1,0 +1,3 @@
+commit: ed339f59975f6de51e6205727026e1f3605033c8
+branch: pilot/v8
+run: https://github.com/MicheleCedolin/Latency-Location-Routing-Problem/actions/runs/44023231150

@@ -1,0 +1,56 @@
+{
+ "p3_tabu": {
+  "cpu_limit_s": 145,
+  "calibration": {
+   "instance": "tuzun/P111122-20",
+   "cluster_iters": 474,
+   "seeds": 4,
+   "cpu_mean": 141.3388460625,
+   "cpu_min": 138.201953177,
+   "cpu_max": 143.221199948,
+   "iters": [
+    474,
+    474,
+    474,
+    474
+   ],
+   "limit_s": 140
+  }
+ },
+ "p7_pr": {
+  "cpu_limit_s": 145,
+  "calibration": {
+   "instance": "tuzun/P122112-10",
+   "cluster_iters": 59,
+   "seeds": 4,
+   "cpu_mean": 142.52396450025,
+   "cpu_min": 128.798778197,
+   "cpu_max": 149.532737135,
+   "iters": [
+    59,
+    59,
+    59,
+    59
+   ],
+   "limit_s": 145
+  }
+ },
+ "p7_pr_x4": {
+  "cpu_limit_s": 575,
+  "calibration": {
+   "instance": "tuzun/P122112-10",
+   "cluster_iters": 59,
+   "seeds": 4,
+   "cpu_mean": 142.52396450025,
+   "cpu_min": 128.798778197,
+   "cpu_max": 149.532737135,
+   "iters": [
+    59,
+    59,
+    59,
+    59
+   ],
+   "limit_s": 145
+  }
+ }
+}
