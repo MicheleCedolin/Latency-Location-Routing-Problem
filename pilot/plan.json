@@ -1,0 +1,76 @@
+{
+ "note": "cluster_iters = mean GRASP iterations of the 30 cluster B1 runs (study_results/b1_tuned.tar.gz) at the cluster budget 3n s; the CPU limit of a pilot is the CPU time the control arm B1 needs on the runner for that many iterations (calibration), times `factor`.",
+ "calib": {
+  "arm": "B1",
+  "seeds": 4
+ },
+ "pilots": [
+  {
+   "name": "p3_tabu",
+   "instance": "tuzun/P111122-20",
+   "cluster_iters": 474,
+   "factor": 1,
+   "arms": [
+    "B1",
+    "B1_tabu"
+   ],
+   "seeds": 30,
+   "bks": 3597.64,
+   "zou_avg": 3604.37,
+   "zou_depots": [
+    2,
+    3,
+    16
+   ],
+   "primary": true
+  },
+  {
+   "name": "p7_pr",
+   "instance": "tuzun/P122112-10",
+   "cluster_iters": 59,
+   "factor": 1,
+   "arms": [
+    "B1",
+    "B1_pr"
+   ],
+   "seeds": 30,
+   "bks": 6018.59,
+   "zou_avg": 6043.38,
+   "zou_depots": [
+    5,
+    6,
+    7
+   ],
+   "zou_routes_per_depot": [
+    8,
+    8,
+    5
+   ],
+   "primary": true
+  },
+  {
+   "name": "p7_pr_x4",
+   "instance": "tuzun/P122112-10",
+   "cluster_iters": 59,
+   "factor": 4,
+   "arms": [
+    "B1",
+    "B1_pr"
+   ],
+   "seeds": 30,
+   "bks": 6018.59,
+   "zou_avg": 6043.38,
+   "zou_depots": [
+    5,
+    6,
+    7
+   ],
+   "zou_routes_per_depot": [
+    8,
+    8,
+    5
+   ],
+   "primary": false
+  }
+ ]
+}

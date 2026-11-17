@@ -1,0 +1,205 @@
+name: Pilot
+
+# Pilots of two experimental mechanisms of llrp_fast v8 (default off):  --dpm-tabu (converged-set tabu)  and  --pr-elite (assignment path relinking).
+# Runs on every push to a branch `pilot/**` that changes pilot/ or this file (and manually); what is run is described by pilot/plan.json, pre-registered in pilot/PLAN.md.
+# Each pilot compares the control arm B1 (V1 depot layer + route pool/SP, as in the paper) with B1 + one new flag, 30 paired seeds, on one hard instance.
+# GitHub runners are not the cluster: the CPU budget is calibrated so that the control arm performs as many GRASP iterations as on the cluster (plan.json: cluster_iters).
+# Results: job summary and branch `pilot-results` (runs/<run id>/, latest/).  Add [skip pilot] to a commit message to suppress a run.
+on:
+  push:
+    branches: ['pilot/**']
+    paths: ['pilot/**', '.github/workflows/pilot.yml']
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Optional comma-separated pilot names (default: all pilots of pilot/plan.json)'
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build + identity check (flags off = v7)
+    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip pilot]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          set -euo pipefail
+          mkdir -p pilot/bin
+          g++ -O3 -std=c++11 -ffp-contract=off -o pilot/bin/llrp_fast_v7 pilot/src/engine/llrp_fast_v7.cpp
+          g++ -O3 -std=c++11 -ffp-contract=off -o pilot/bin/llrp_fast_v8 pilot/src/engine/llrp_fast_v8.cpp
+          g++ -O2 -std=c++11 -o pilot/bin/llrp_tools_v7 pilot/src/tools/llrp_tools.cpp
+          g++ -std=c++11 -pedantic-errors -Wall -fsyntax-only pilot/src/engine/llrp_fast_v8.cpp
+          sha256sum pilot/bin/*
+      - name: Identity check
+        run: pilot/identity_check.sh pilot/bin cpp/inst pilot/arms
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bin
+          path: pilot/bin
+          retention-days: 7
+
+  setup:
+    name: Read plan
+    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip pilot]')
+    runs-on: ubuntu-latest
+    outputs:
+      calib: ${{ steps.p.outputs.calib }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: p
+        env:
+          ONLY: ${{ inputs.only }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          plan = json.load(open("pilot/plan.json")); only = [x for x in os.environ.get("ONLY", "").split(",") if x]
+          seen, inc = set(), []
+          for P in plan["pilots"]:
+              if only and P["name"] not in only: continue
+              if P["instance"] in seen: continue
+              seen.add(P["instance"]); inc.append({"instance": P["instance"], "cluster_iters": P["cluster_iters"], "tag": P["instance"].split("/")[-1]})
+          print("calib=" + json.dumps({"include": inc}))
+          PY
+
+  calib:
+    name: Calibrate budget ${{ matrix.tag }}
+    needs: [build, setup]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJSON(needs.setup.outputs.calib) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: bin
+          path: pilot/bin
+      - name: Calibrate
+        run: |
+          chmod +x pilot/bin/*
+          python3 pilot/calib.py "${{ matrix.instance }}" "${{ matrix.cluster_iters }}" 4 B1 pilot/bin pilot/arms cpp/inst calib_${{ matrix.tag }}.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: calib-${{ matrix.tag }}
+          path: calib_${{ matrix.tag }}.json
+
+  plan:
+    name: Plan seed blocks
+    needs: calib
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: calib-*
+          path: calib
+          merge-multiple: true
+      - id: m
+        env:
+          ONLY: ${{ inputs.only }}
+        run: |
+          python3 - <<'PY' > plan_out.txt
+          import json, os, glob, math
+          plan = json.load(open("pilot/plan.json")); only = [x for x in os.environ.get("ONLY", "").split(",") if x]
+          cal = {}
+          for f in glob.glob("calib/*.json"):
+              d = json.load(open(f)); cal[d["instance"]] = d
+          inc, limits = [], {}
+          for P in plan["pilots"]:
+              if only and P["name"] not in only: continue
+              c = cal[P["instance"]]; lim = max(10, int(5 * math.ceil(c["cpu_mean"] * P["factor"] / 5.0)))
+              limits[P["name"]] = {"cpu_limit_s": lim, "calibration": c}
+              n, per = P["seeds"], 4
+              for b, s0 in enumerate(range(1, n + 1, per)):
+                  arms = P["arms"] if b % 2 == 0 else P["arms"][::-1]
+                  inc.append({"pilot": P["name"], "instance": P["instance"], "limit": lim, "seed0": s0, "nproc": min(per, n - s0 + 1), "arms": " ".join(arms)})
+          json.dump(limits, open("limits.json", "w"), indent=1)
+          print("matrix=" + json.dumps({"include": inc}))
+          PY
+          cat plan_out.txt >> "$GITHUB_OUTPUT"; cat limits.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: limits
+          path: limits.json
+
+  block:
+    name: ${{ matrix.pilot }} seeds ${{ matrix.seed0 }}+ (${{ matrix.arms }})
+    needs: [build, plan]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: bin
+          path: pilot/bin
+      - name: Run the seed block
+        run: |
+          chmod +x pilot/bin/* pilot/run_block.sh
+          pilot/run_block.sh "${{ matrix.instance }}" "${{ matrix.limit }}" "${{ matrix.seed0 }}" "${{ matrix.nproc }}" "${{ matrix.arms }}" "$GITHUB_WORKSPACE/out/${{ matrix.pilot }}"
+      - name: Pack
+        if: always()
+        run: |
+          [ -d out ] || exit 0
+          tar czf block.tgz -C out .
+          ls -l block.tgz
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: blk-${{ matrix.pilot }}-${{ matrix.seed0 }}
+          path: block.tgz
+          retention-days: 30
+
+  aggregate:
+    name: Analyse + publish
+    needs: [block]
+    if: always() && needs.block.result != 'skipped'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install numpy scipy
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: blk-*
+          path: blocks
+      - uses: actions/download-artifact@v4
+        with:
+          name: limits
+          path: limits
+      - name: Analyse
+        run: |
+          set -euo pipefail
+          mkdir -p agg res
+          for t in blocks/*/block.tgz; do tar xzf "$t" -C agg; done
+          python pilot/analyze.py pilot/plan.json agg res study_results/b1_tuned.tar.gz --limits limits/limits.json | tee -a "$GITHUB_STEP_SUMMARY"
+          for d in agg/*/; do n=$(basename "$d"); tar czf "res/runs_$n.tgz" -C agg "$n"; done
+          cp limits/limits.json res/
+          ls -l res
+      - name: Commit the results to the branch pilot-results
+        run: |
+          out="runs/${{ github.run_id }}"
+          rm -rf /tmp/res && mkdir /tmp/res && cd /tmp/res
+          git init -q
+          git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          if git fetch -q --depth 1 origin pilot-results; then git checkout -q -b pilot-results FETCH_HEAD; else git checkout -q --orphan pilot-results; fi
+          mkdir -p "$out"; cp "$GITHUB_WORKSPACE"/res/* "$out"/
+          printf 'commit: %s\nbranch: %s\nrun: %s/%s/actions/runs/%s\n' "${{ github.sha }}" "${{ github.ref_name }}" "${{ github.server_url }}" "${{ github.repository }}" "${{ github.run_id }}" > "$out/INPUTS.txt"
+          rm -rf latest && mkdir -p latest && cp "$out"/* latest/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Pilot results of run ${{ github.run_id }}"
+          git push -q origin pilot-results
