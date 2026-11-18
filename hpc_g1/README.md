@@ -11,4 +11,4 @@ Decomposition (exploratory): mean gap over the 7 instances B1 0.553, B1_tabu 0.5
 Post hoc, descriptive: final open depot set equal to the RLHEA set {2,3,16} on P111122-20: B1 2/30, B1_tabu 7/30, B1_tabudraw 4/30, B1_tabuskip 4/30 (the gap did not follow).
 Per-instance two-sided Mann-Whitney (B1_tabu vs B1, uncorrected, 7 instances): P121112-10 +0.224 (p = 0.01, worse), P122212-10 -0.068 (p = 0.02, better), all others p >= 0.19.
 No run beat the BKS (< BKS - 0.005); runs at BKS + 0.005: B1 7, B1_tabu 8, B1_tabudraw 7, B1_tabuskip 7.
-Cluster context: 24 worker jobs x 4 slots on 2 x Xeon E5-2698 v3 nodes (CentOS 7.4, kernel 3.10.0-693.5.2.el7), node load 55-64 on 64 hardware threads; the concurrent B1 control reached 0.82-0.92 of the iterations of the archived B1 runs.
+Cluster context: 24 worker jobs x 4 slots on 2 x Xeon E5-2698 v3 nodes (CentOS 7.4, kernel 3.10.0-693.5.2.el7), node load 55-64 on 64 hardware threads; the concurrent B1 control reached 0.82-0.93 of the iterations of the archived B1 runs.
