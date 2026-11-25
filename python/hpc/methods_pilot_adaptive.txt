@@ -1,5 +1,0 @@
-# Pilot methods for the depot-layer arms (same settings as the host methods of the CLRP 6.4.0 pilot)
-aco first loffler9
-alns first loffler9
-ga first loffler9
-grasp first loffler9

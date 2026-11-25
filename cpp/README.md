@@ -1,7 +1,6 @@
 # `llrp_fast` — GRASP + RVND engine for the LLRP (C++)
 
-Fast C++ implementation of GRASP with RVND for the **Latency Location-Routing Problem** (LLRP), together with the tooling for the
-operator-ablation study: family-wise experiment runner, leave-one-out / add-one-in ablation, automatic parameter tuning with
+Fast C++ implementation of GRASP with RVND for the **Latency Location-Routing Problem** (LLRP), together with the tooling for experiments: family-wise experiment runner, leave-one-out / add-one-in ablation, automatic parameter tuning with
 [irace](https://mlopez-ibanez.github.io/irace/), independent solution verification and statistical summaries.
 
 * **Everything is C++11** (`g++ >= 4.8`). No Python and no R are needed to build, test and run experiments; R + irace are needed only to re-run the tuning.
@@ -42,7 +41,7 @@ The code compiles cleanly with `-std=c++11 -pedantic-errors` and with clang; it 
 | [`../study_results/`](../study_results) | Raw result files of the study (1x and ext10 final evaluation, `--atmost` check, irace log) |
 | `irace_dryrun.sh` | Exercises the target-runner chain without irace |
 | `*.sge`, `setup_irace_env.sh` | Job scripts for an SGE cluster and a root-less R + irace installation (micromamba) |
-| `data/` | `timing_probe_20it.tsv` (CPU time of 20 iterations on every instance), `inst_validation_published_solutions.txt`, pilot experiments (`pilot_stall_calibration`, `pilot_ils_probe`) |
+| `data/` | `timing_probe_20it.tsv` (CPU time of 20 iterations on every instance), `inst_validation_published_solutions.txt` |
 
 ### Instance format (`*.inst`)
 
@@ -82,8 +81,7 @@ Results go to `results/<family>/<name>/`: `run.csv, routes.csv, ops.csv, trace.c
 (`run.csv` of a run is written last and marks it as complete).
 
 **Termination.** Stop after `STALL=300` consecutive non-improving GRASP iterations, hard cap `MAXITER=1000`, optional CPU limit `TLIMIT` (seconds).
-`run.csv` column "Stop Reason" is `stall | max_iter | time`. The stall threshold was calibrated in a pilot on ten Barreto instances (`data/pilot_stall_calibration`,
-`bin/llrp_tools calibrate data/pilot_stall_calibration`); the calibration is not validated for Prins and Tüzün instances.
+`run.csv` column "Stop Reason" is `stall | max_iter | time`. The stall rule is used only by the iteration-limited `run_config.sh` experiments; the runs of the study are CPU-time limited (`run_final.sh`, `run_extended.sh`).
 
 ```bash
 bin/llrp_tools summarize results/barreto/full3 --manifest manifest.tsv --train selection/train.txt
@@ -95,6 +93,8 @@ bin/llrp_tools verify inst/barreto/Ch50-5.inst results/barreto/full3/runs/Ch50-5
 `routes.csv` lists the open depots and the chosen routes (depot, customer sequence, arrival times, load, route latency); `run.csv` lists the open depot set of every run.
 
 ## 4. Operator ablation
+
+*The ablation tooling is provided for completeness; the manuscript reports no ablation result (it lists an ablation of the base method among its limitations and future work).*
 
 ```bash
 PLAN_ONLY=1 FAMILY=prins ./run_ablation.sh       # plan + time estimate
@@ -180,7 +180,7 @@ Reducing the number of seeds (e.g. `NPROC=10`) does not shorten the wall time, o
 
 ## 9. Limitations
 
-* The stall threshold (K = 300) comes from a Barreto-only pilot. The ablation uses a fixed horizon (300 iterations), so on large instances non-converged results may be compared; section 5 of the ablation report (equal iterations / equal CPU) makes this visible.
+* The stall threshold (K = 300) comes from a Barreto-only pilot (not part of this repository). The ablation uses a fixed horizon (300 iterations), so on large instances non-converged results may be compared; section 5 of the ablation report (equal iterations / equal CPU) makes this visible.
 * Operator "gain" counters are latency reductions of applied moves; because of the SO penalty they are not identical to the LOO delta.
 * The Tüzün-family ablation is long (≈ 13 h on 30 cores); running it on the training set (17 instances, ≈ 4.3 h) and testing the decisions on the test instances is cheaper.
 
@@ -193,4 +193,4 @@ Reducing the number of seeds (e.g. `NPROC=10`) does not shorten the wall time, o
 * López-Ibáñez, M., Dubois-Lacoste, J., Pérez Cáceres, L., Birattari, M., Stützle, T. (2016). The irace package: Iterated racing for automatic algorithm configuration. *Operations Research Perspectives* 3:43–58. Fawcett, C., Hoos, H. H. (2016). Analysing differences between algorithm configurations through ablation. *J. Heuristics* 22:431–458 (irace `ablation()` is a path ablation, different from the LOO/ADD design used here).
 * Experimental methodology: Barr et al. (1995, *J. Heuristics* 1:9–32); Johnson (2002, DIMACS); Hoos & Stützle (2005, *Stochastic Local Search*).
 * Open data / code: Salehipour et al. (2011) TRP-S10…S1000; GitHub `fredericoguerra/MinimumLatencyProblem` (GILS-RVND; licence not verified); arXiv 1908.10705 (Santana, Plastino, Rosseti).
-* Possible next steps: Fawcett–Hoos path ablation (BASE → tuned configuration); ILS threshold experiment (`data/pilot_ils_probe` is indicative only, 2 seeds); route-pair caching; re-calibration of the stall threshold for Prins/Tüzün.
+* Possible next steps: Fawcett–Hoos path ablation (BASE → tuned configuration); ILS threshold experiment; route-pair caching; re-calibration of the stall threshold for Prins/Tüzün.

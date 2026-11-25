@@ -10,8 +10,6 @@ cpp/irace/irace.Rdata
 cpp/irace/irace_stdout.txt
 cpp/irace/trlog.txt
 cpp/irace/*.log
-python/analysis/
-python/logs/
 
 # python
 __pycache__/
@@ -22,11 +20,6 @@ __pycache__/
 *.swp
 .DS_Store
 
-# large_ablation outputs
-large_ablation/results_large*/
-large_ablation/results_full*/
-large_ablation/*.log
-
 # analysis scripts: DP kernel built on first use
 analysis/libdp_latency.so
 
@@ -34,4 +27,3 @@ paper/out/
 paper/__pycache__/
 paper/tests/__pycache__/
 analysis/__pycache__/
-analysis/enum_paths

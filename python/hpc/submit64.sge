@@ -1,9 +1,0 @@
-#!/bin/bash
-#$ -S /bin/bash
-#$ -cwd
-#$ -N LLRP_64
-#$ -pe smp 8
-# stdout/stderr must be passed as FILES via qsub -o/-e, not logs/ directory.
-set -euo pipefail
-cd "${SGE_O_WORKDIR:-$PWD}"
-exec bash hpc/pilot64.sh

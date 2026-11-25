@@ -27,10 +27,10 @@ No BKS turned out to be numerically wrong; two of them cannot be verified from p
 
 ## Notes
 
-* `python/reference/LLRP_reference.csv` carries the same values (plus `K`, `p`, minimum vehicles/depots by capacity) under the Python kit's instance names (`coordP111112`, ...). Two entries differ in the last digit because of rounding:
+* `reference/LLRP_reference.csv` carries the same values (plus `K`, `p`, minimum vehicles/depots by capacity) under the names of the raw instance files (`coordP111112`, ...; see [`../instances_raw`](../instances_raw)). Two entries differ in the last digit because of rounding:
   `20-5-1b-5` (608.05 here, 608.06 there; the unrounded value is 608.055) and `Or117-14` (53798.53 here, 53798.5 there).
-* `python/reference/published_check.csv` lists, for every published solution file, its recomputed latency and relative deviation from the registry value.
-* Literature results other than the best-known values are in [`literature_results.csv`](literature_results.csv) (next section).
+* `reference/published_check.csv` lists, for every published solution file, its recomputed latency and relative deviation from the registry value.
+* `reference/pmedian_rank_of_published_depot_sets.csv` gives the rank of the depot set of each published solution among all depot sets of its size, ordered by the p-median bound (used for the depot-aware diversification). Literature results other than the best-known values are in [`literature_results.csv`](literature_results.csv) (next section).
 
 ## Published results of other algorithms (`literature_results.csv`)
 

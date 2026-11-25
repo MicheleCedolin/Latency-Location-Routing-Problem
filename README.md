@@ -6,23 +6,21 @@ constant-time move evaluation and **irace**-tuned configuration for the **Latenc
 
 The LLRP asks for a set of open depots and a set of vehicle routes that serve all customers and **minimise the sum of the customer arrival times**
 (cumulative cost; vehicles do not return to the depot; at most `Nv` routes, at most `Ng` open depots; depot capacities are ignored, as in the literature).
-Problem definition: [`python/FORMULATION_LLRP.md`](python/FORMULATION_LLRP.md).
-
-**Learn and try it in the browser:** the interactive guide in [`docs/`](docs) (open `docs/index.html`, or the GitHub Pages site once enabled: `https://michelecedolin.github.io/Latency-Location-Routing-Problem/`) explains the operators and the 19 heuristics and lets you run a small version of the search.
+The problem definition is given in Section 3 of the manuscript.
 
 ## Repository layout
 
+Everything in this repository is used by the manuscript; there is no unrelated code.
+
 | Folder | Content |
 |---|---|
-| [`cpp/`](cpp) | **Main code.** `llrp_fast` (GRASP + RVND, 14 operators, strategic oscillation, depot swap) and `llrp_tools` (experiment orchestration, ablation, irace set-up, verification, statistics). C++11 only. Includes the 76 instances in `inst/`, the tuned configuration `irace/best.flags` and all run scripts. → [`cpp/README.md`](cpp/README.md) |
-| [`study_results/`](study_results) | Raw result files of the study: final evaluation at the 1x and the 10x ("ext10") CPU budget, the `--atmost` check, the irace log. → [`study_results/README.md`](study_results/README.md) |
-| [`analysis/`](analysis) | Post-hoc analyses of the result archives: `ext10_report.py` (1x versus extended budget, anytime behaviour in iteration space, Wilcoxon comparison with the published RLHEA values), `depot_decomp.py` (what differs from a reference solution: depot set, assignment, route partition, order), route pool + exact DP + set partitioning (pooled recombination of many runs, coverage of the published routes) and the equal-time comparison with RLHEA; the last two are also runnable as a GitHub workflow. → [`analysis/README.md`](analysis/README.md) |
-| [`bks/`](bks) | `LLRP_BKS.csv`: best-known value, bounds and verification status of every instance; `literature_results.csv`: published best / average / time of seven algorithms on the 76 instances; `compare_published.py`: gap and win-tie-loss table of our results against them. → [`bks/README.md`](bks/README.md) |
-| [`python/`](python) | Python heuristic laboratory (17 campaign metaheuristics, delta-evaluating local search, adaptive depot layer, SGE launcher, 128 unit tests) with the raw instance files and the registry of the 76 instances. → [`python/README.md`](python/README.md) |
-| [`paper/`](paper) | The paper pipeline: regenerates all result tables, quoted numbers and figures from `study_results` (`paper/run_all.sh`, ~15 s); the tables are byte-identical to those of manuscript draft v3.4 and pinned by checksums. |
-| [`large_ablation/`](large_ablation) | Resumable parallel runner for the large-instance component analysis (Base+SO vs Base+SO+DS, Python GRASP-VND modules, Prins and Tüzün instances with n >= 100; 30 paired seeds), with its instance workbooks and a smoke test. |
-| [`docs/`](docs) | **Interactive guide** (GitHub Pages): the 14 operators with before/after moves and hover details, the 19 metaheuristics with parameters and references, a GRASP + RVND playground in the browser, BibTeX. One self-contained page, built from `docs/src` by `docs/build.py`. → [`docs/README.md`](docs/README.md) |
-| [`.github/workflows/`](.github/workflows) | `ci.yml` (build + self-check + unit tests) and `experiment.yml` (manually triggered experiments on GitHub runners). |
+| [`cpp/`](cpp) | **Solver and run scripts.** `llrp_fast` (GRASP + RVND, 14 operators, strategic oscillation, depot swap) and `llrp_tools` (experiment orchestration, independent verification, statistics). C++11 only. Includes the 76 instances in `inst/`, the tuned configuration `irace/best.flags`, the irace scenario and all run scripts. → [`cpp/README.md`](cpp/README.md) |
+| [`study_results/`](study_results) | Raw result files of the runs reported in the manuscript (one archive per campaign; the table below says which). → [`study_results/README.md`](study_results/README.md) |
+| [`paper/`](paper) | Regenerates the result tables, quoted numbers and figures of the base-method campaigns from `study_results` (`paper/run_all.sh`, ~15 s); the tables are pinned by checksums. → [`paper/README.md`](paper/README.md) |
+| [`analysis/`](analysis) | Analyses of the result archives: `ext10_report.py` (tuning budget versus extended budget, comparison with RLHEA), `depot_decomp.py` (where the base method loses: depot set, assignment, route partition, order), `anytime_at_tavg.py` (equal-time comparison with RLHEA). → [`analysis/README.md`](analysis/README.md) |
+| [`bks/`](bks) | `LLRP_BKS.csv`: best-known value, bounds and verification status of every instance; `literature_results.csv`: published best / average / time of seven algorithms on the 76 instances; `compare_published.py`; `reference/`: recomputation of the published solutions and the p-median ranks of their depot sets. → [`bks/README.md`](bks/README.md) |
+| [`instances_raw/`](instances_raw) | The instance files as published by their authors (`B` Barreto, `P` Prins, `T` Tüzün–Burke), with SHA-256 sums; `cpp/inst/` is their conversion to the solver format. |
+| [`.github/workflows/`](.github/workflows) | `ci.yml` (build, self-check, regeneration of the tables), `experiment.yml` (manually triggered runs on GitHub runners), `analysis.yml` (equal-time analysis of an archive). |
 
 ## Quick start (C++)
 
@@ -48,7 +46,7 @@ Full documentation (operators, ablation, irace, final evaluation, time estimates
 
 ## Benchmark instances
 
-76 instances, in one text format under [`cpp/inst/`](cpp/inst) (raw data in [`python/data/`](python/data) with SHA-256 sums):
+76 instances, in one text format under [`cpp/inst/`](cpp/inst) (raw data in [`instances_raw/`](instances_raw) with SHA-256 sums):
 
 | Family | Instances | Customers `n` | Depots `m` | Source |
 |---|---|---|---|---|
@@ -65,6 +63,26 @@ The bounds `Nv` (routes) and `Ng` (open depots) follow Moshref-Javadi & Lee (201
 [`bks/LLRP_BKS.csv`](bks/LLRP_BKS.csv) — best-known latency of every instance (best of the published best-known value and the RLHEA best of Zou et al. 2024)
 and the result of re-evaluating the published solutions: 72 instances verified, one reconstructed from an incomplete solution file, three that cannot be verified from published data
 (see [`bks/README.md`](bks/README.md)). Averages and running times of competing algorithms are given in the original papers; they are not repeated here because they were measured on different hardware.
+
+## Reproducing the manuscript, stage by stage
+
+The method is built in stages; each stage was evaluated in its own campaign with the same instances, seeds (1 to 30) and extended CPU budget. All stages are flags of one solver (`llrp_fast`); without the flags a stage is switched off.
+Every campaign writes `run.csv`, `routes.csv`, `trace.csv` and `env.txt` (flags, binary and manifest SHA-256, host) and is verified run by run with `llrp_tools verify`.
+
+| Stage | Manuscript | Flags (added to the previous stage) | Instances x runs, budget | Command | Archive in `study_results/` |
+|---|---|---|---|---|---|
+| 0 | Instances, reference values | — | 76 | `cpp/check_inst_data.sh`, `python3 bks/check_literature.py` | `bks/`, `instances_raw/` |
+| 1 | Tuning (Table of parameters) | irace scenario of `cpp/irace/` | 17 training instances, 3000 experiments | `cpp/run_irace.sh` | `irace_logs.tar.gz` |
+| 2a | Base method, tuning budget | `cpp/irace/best.flags` | 76 x 30, 0.3 n s | `cpp/run_final.sh` | `final_1x_tuned.tar.gz` |
+| 2b | Base method, extended budget | same | 58 x 30, 3 n s | `INSTLIST=ext10_instances.txt TC=300 TAG=ext10 OUT=results_extended10 cpp/run_extended.sh` | `ext10_tuned.tar.gz` |
+| 2c | Prins `50-5-2BIS-5` | `+ --atmost` (`cpp/irace/atmost.flags`) | 1 x 30, 0.3 n s | `FAMILY=custom FLAGS_FILE=irace/atmost.flags TAG=atmost cpp/run_final.sh 50-5-2BIS-5` | `atmost_50-5-2BIS-5.tar.gz` |
+| 3 | + depot-aware diversification | `--dpm-rank 10,0.25 --dpm-prune` | 57 x 30, 3 n s | *to be added* | *to be added* |
+| 4 | + route pool (**final method**) | `--pool-sp --pool-tl 3 --pool-sets 3 --pool-first 8 --pool-src 1` | 57 x 30, 3 n s including the set-partitioning time | *to be added* | `b1_tuned.tar.gz` (produced with `llrp_fast` v7) |
+| 5 | Exploratory memetic phase (Supporting Information S7) | `--eax-split 0.4 --eax-pop 20 --eax-psi 0.55 --eax-esc 12 --eax-ils 0 --eax-pool-theta 0.01` | 57 x 30, 3 n s | *to be added* | *to be added* |
+
+**Status of this repository (to be updated with the next commit).** Stages 0 to 2 are complete: every run of the archives can be replayed exactly from its iteration count (`replay_check_*.txt` in the archives) and `paper/run_all.sh` regenerates their tables.
+The source of stages 3 to 5 (`llrp_fast` v9, which contains all stages as flags), the flag files of the four configurations
+and the archives of stages 3 and 5 are not yet in the repository; the archive of stage 4 is, but its solver version is not.
 
 ## Running experiments on GitHub Actions
 
@@ -84,7 +102,7 @@ and a single job is limited to 6 hours, so the Tüzün family should be run with
 
 ## Reproducibility notes
 
-* Results of the study were produced with the scripts in `cpp/` (`run_config.sh`, `run_ablation.sh`, `run_irace.sh`, `run_final.sh`, `run_extended.sh`) on an SGE cluster (30 cores per job, one process per seed); the raw result files are in [`study_results/`](study_results).
+* Results of the study were produced with the scripts in `cpp/` (`run_irace.sh`, `run_final.sh`, `run_extended.sh`) on an SGE cluster (30 cores per job, one process per seed); the raw result files are in [`study_results/`](study_results).
 * The tuned configuration is stored in [`cpp/irace/best.flags`](cpp/irace/best.flags); the irace set-up (27 parameters, 17 training instances, `time` budget mode) is in `cpp/irace/` and is re-created by `cpp/run_irace.sh`.
 * `cpp/selfcheck.sh` and the CI workflow check move evaluation against full recomputation, the independent solution verifier, determinism, the experiment tool chain and the `--atmost` mode.
 * The solver option `--atmost` (at most `Ng` open depots instead of exactly `Ng`) is used in the manuscript for one instance only (Prins `50-5-2BIS-5`); all other results use the default.

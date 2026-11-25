@@ -1,6 +1,6 @@
 name: CI
 
-# Build, self-check of the C++ engine and unit tests of the Python kit.
+# Build and self-check of the C++ engine, consistency of the published-results tables, regeneration of the paper tables from the archives.
 # Runs on every push / pull request; takes a few minutes.
 on:
   push:
@@ -28,44 +28,6 @@ jobs:
       - name: Instance data check
         working-directory: cpp
         run: ./check_inst_data.sh
-      - name: Engine versus exact optima on tiny random instances
-        run: python3 -I python/tools/exact_vs_engine.py --instances 40 --seeds 5
-
-  python:
-    name: Python kit tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install optional dependencies (numpy, scipy)
-        run: python -m pip install numpy scipy
-      - name: Unit tests
-        working-directory: python
-        run: python -I -m unittest discover -s tests
-      - name: Launcher smoke tests
-        working-directory: python
-        run: |
-          bash tests/smoke_hpc.sh
-          bash tests/smoke_shards.sh
-
-  docs:
-    name: Web guide (docs/) build + tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-      - name: docs/index.html is up to date with docs/src
-        run: python3 docs/build.py --check
-      - name: Engine tests (Node)
-        run: node docs/test/engine.test.mjs
-      - name: Page smoke test (jsdom)
-        run: |
-          npm install --prefix "$RUNNER_TEMP/jsd" jsdom --no-audit --no-fund --silent
-          JSDOM_FROM="$RUNNER_TEMP/jsd" node docs/test/dom.test.mjs
 
   bks:
     name: BKS table, literature results, analysis
@@ -110,25 +72,8 @@ jobs:
       - name: Six figures were written
         run: test "$(ls "$RUNNER_TEMP"/paper/out/figs/*.pdf | wc -l)" -eq 6
 
-  large_ablation:
-    name: Large-instance ablation runner (smoke test)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install requirements
-        run: python -m pip install -r large_ablation/requirements.txt
-      - name: Checksums of the modules and instance workbooks
-        working-directory: large_ablation
-        run: sha256sum -c CHECKSUMS.sha256
-      - name: Smoke test (2 seeds x 3 iterations, determinism, resume, aggregate)
-        working-directory: large_ablation
-        run: python tests/test_smoke.py
-
   analysis:
-    name: Analysis scripts (smoke test)
+    name: Equal-time analysis script (smoke test)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -137,10 +82,8 @@ jobs:
           python-version: "3.12"
       - name: Install numpy, scipy
         run: python -m pip install numpy scipy
-      - name: Pool + DP + SP and equal-time scripts on the --atmost archive
+      - name: Equal-time script on the --atmost archive
         run: |
           mkdir -p "$RUNNER_TEMP/t" && tar xzf study_results/atmost_50-5-2BIS-5.tar.gz -C "$RUNNER_TEMP/t"
-          python analysis/pool_sp.py "$RUNNER_TEMP/t" --out "$RUNNER_TEMP/o" 2>/dev/null
           python analysis/anytime_at_tavg.py "$RUNNER_TEMP/t" --out "$RUNNER_TEMP/o"
-          grep -q "SP solutions that failed the independent audit: 0" "$RUNNER_TEMP/o/pool_sp_summary.md"
-          grep -q "recomputed latency differs from \`Total Latency\` by > 1e-6 (relative): 0" "$RUNNER_TEMP/o/pool_sp_summary.md"
+          test -s "$RUNNER_TEMP/o/anytime_at_tavg_summary.md"

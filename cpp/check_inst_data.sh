@@ -17,7 +17,7 @@ for f in "$ROOT"/tuzun/*.inst; do
 done
 if [ "$bad" -gt 0 ]; then
   echo "ERROR: $bad / $n Tuzun instances contain coordinates truncated to integers.  Restore inst/tuzun/*.inst from the repository" >&2
-  echo "       (git checkout -- inst/tuzun); the full-precision coordinates are also in ../python/data/T/*.dat." >&2
+  echo "       (git checkout -- inst/tuzun); the full-precision coordinates are also in ../instances_raw/T/*.dat." >&2
   exit 1
 fi
 exit 0
