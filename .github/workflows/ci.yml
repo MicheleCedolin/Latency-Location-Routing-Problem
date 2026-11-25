@@ -87,3 +87,18 @@ jobs:
           mkdir -p "$RUNNER_TEMP/t" && tar xzf study_results/atmost_50-5-2BIS-5.tar.gz -C "$RUNNER_TEMP/t"
           python analysis/anytime_at_tavg.py "$RUNNER_TEMP/t" --out "$RUNNER_TEMP/o"
           test -s "$RUNNER_TEMP/o/anytime_at_tavg_summary.md"
+
+  replay:
+    name: Archives are reproduced by the engine of this repository (replay)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        working-directory: cpp
+        run: ./build.sh
+      - name: Replay the cheapest runs of the archives of stages 2 and 4
+        run: |
+          python3 -I analysis/replay_archive.py study_results/final_1x_tuned.tar.gz --flags cpp/stages/1_base.flags --n-runs 3 --jobs 3
+          python3 -I analysis/replay_archive.py study_results/ext10_tuned.tar.gz --flags cpp/stages/1_base.flags --n-runs 3 --jobs 3
+          python3 -I analysis/replay_archive.py study_results/atmost_50-5-2BIS-5.tar.gz --flags cpp/irace/atmost.flags --n-runs 2 --jobs 2
+          python3 -I analysis/replay_archive.py study_results/b1_tuned.tar.gz --flags cpp/stages/3_pool.flags --n-runs 3 --jobs 3

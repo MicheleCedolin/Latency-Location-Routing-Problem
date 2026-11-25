@@ -10,6 +10,9 @@
 //
 //   llrp_fast --instance X.inst --seed S [--ops zou|legacy5|full|LIST] [--so] [--ds] [--select best|first] [--order random|fixed]
 //             [--max-iter 1000] [--stall K] [--time SEC] [--ils K] [--rcl 5] [--out PREFIX] [--algo NAME] [--check] [--quiet]
+//             [--dpm-rank K[,eps]] [--dpm-prune] [--dpm-memory]      (v6 depot layer, off by default; see the block before initial_allowed)
+//             [--pool-sp] [--pool-tl S] [--pool-sets M] [--pool-first N] [--pool-src 1|2] [--pool-theta X] [--pool-nodes N]
+//                                                                    (v7 in-run route pool + exact order DP + set-partitioning recombination, off by default; poolsp.hpp)
 //
 // Build:  g++ -O3 -std=c++11 -ffp-contract=off -o llrp_fast llrp_fast.cpp
 #include <algorithm>
@@ -29,6 +32,7 @@
 #include <string>
 #include <vector>
 #include <time.h>
+#include "poolsp.hpp"
 
 using std::string;
 using std::vector;
@@ -1176,7 +1180,9 @@ static void descent(State &S, Track &T) {
     }
 }
 // returns the local optimum (SO: the best feasible solution met during the descent)
-static Sol local_search(const Sol &start) {
+// v9: esc > 0 (children of the memetic phase, which start infeasible): if the descent ends without ever meeting a feasible solution, beta is multiplied by
+// so_f2 and the descent is resumed, at most esc times.  esc = 0 (every call of v8) leaves the function unchanged.
+static Sol local_search(const Sol &start, int esc = 0) {
     State S;
     state_from(start, S);
     Track T;
@@ -1186,6 +1192,11 @@ static Sol local_search(const Sol &start) {
         if (state_feasible(S)) { T.best = sol_from(S); T.have = true; T.best_cost = S.tot; }
     }
     descent(S, T);
+    for (int e = 0; e < esc && g_so && !T.have; e++) {
+        S.beta = std::min(g_beta_max, S.beta * g_so_f2);
+        descent(S, T);
+        if (!T.have && state_feasible(S)) { T.best = sol_from(S); T.have = true; T.best_cost = S.tot; }
+    }
     if (g_so && T.have) return T.best;
     return sol_from(S);
 }
@@ -1212,15 +1223,32 @@ static bool perturb_double_bridge(Sol &s) {
     return true;
 }
 static int g_ils = 0;
-static Sol local_search_ils(const Sol &start) {
-    Sol best = local_search(start);
-    if (g_ils <= 0) return best;
+// ---- v7: in-run route pool + SP recombination (all behind --pool-sp; default off -> identical to v6)
+static bool g_pool_on = false;
+static int g_pool_src = 1;                 // 1: final solution of each GRASP iteration;  2: + every feasible ILS local optimum within (1+theta) of the ILS best
+static double g_pool_tl = 3.0;             // CPU seconds per SP call (also reserved at the end of the budget for the final call)
+static double g_pool_theta = 0.02;
+static int g_pool_sets = 3, g_pool_first = 8;
+static long g_pool_nodes = 300000;
+static psp::Pool *PL = nullptr;
+static std::map<vector<int>, double> g_set_best;           // open depot set -> best cost seen
+static void pool_add_sol(const Sol &s) {                   // s feasible, cost computed
+    for (auto &r : s.routes) if (!r.path.empty()) PL->add(r.depot, r.path);
+    auto it = g_set_best.find(s.open);
+    if (it == g_set_best.end() || s.cost < it->second) g_set_best[s.open] = s.cost;
+}
+static Sol local_search_ils(const Sol &start, int esc = 0, int ils = -1) {
+    Sol best = local_search(start, esc);
+    if (ils < 0) ils = g_ils;
+    if (ils <= 0) return best;
     int cnt = 0;
-    while (cnt < g_ils) {
+    while (cnt < ils) {
         Sol p = best;
         if (!perturb_double_bridge(p)) break;
         Sol res = local_search(p);
-        if (check_validity(res) && res.cost < best.cost - 1e-9) { best = res; cnt = 0; }
+        const bool vres = check_validity(res);
+        if (vres && g_pool_on && g_pool_src >= 2 && res.cost <= best.cost * (1.0 + g_pool_theta)) pool_add_sol(res);
+        if (vres && res.cost < best.cost - 1e-9) { best = res; cnt = 0; }
         else cnt++;
     }
     return best;
@@ -1330,10 +1358,156 @@ static Sol ECWA_fast(vector<int> allowed, int rcl_size) {
 static bool g_ecwa_ref = false;
 static Sol construct(const vector<int> &allowed, int rcl) { return g_ecwa_ref ? ECWA(allowed, rcl) : ECWA_fast(allowed, rcl); }
 
-static vector<int> initial_allowed(bool div_mode, const vector<int> &best_depots_div) {
+// ================================================================================================ depot layer (v6; ALL OFF by default -> bit-identical to v5)
+// p-median lower bound of a depot set S:  LB(S) = sum over customers c of min_{d in S} dist(d, c).  Every route of a solution that opens only depots of S
+// serves its customers in some order after leaving its depot; the arrival time at c is at least the straight-line distance (triangle inequality, no service
+// times), so the latency of every solution restricted to S is >= LB(S).  The table sorts all C(m, Ng) subsets by LB (ascending, ties lexicographic).
+//   --dpm-rank K[,eps]  D2: a diversification start set is drawn from the K smallest-LB sets with probability 1-eps and uniformly from all sets with
+//                       probability eps (default eps 0.25; K = 0 or flag absent: uniform draw as in v5).
+//   --dpm-prune         D1: a drawn start set with LB(S) >= incumbent cost is redrawn (no GRASP iteration is spent on it).  NOTE: this filters START sets
+//                       only; the depot operators of the local search may still leave S.
+//   --dpm-memory        D3: (a) a start set is used at most once per run (until every set has been used); (b) the elite depot set (best open set of any
+//                       diversification iteration so far) is kept across cycles and is the start set of the intensification iterations.
+// Not combinable with --atmost (the table is built for exactly min(Ng, m) open depots).
+//   --dpm-tabu          v8 (EXPERIMENTAL, default off): converged-set tabu.  A cycle "converges" on the depot set of its best diversification solution (the set the
+//                       intensification phase refines); that set (and the open set of the best intensification solution) goes on a tabu list for the rest of the run.
+//                       Later start-set draws skip tabu sets (top-K and uniform draws); when the diversification phase of a later cycle ends on a tabu set,
+//                       its intensification phase is skipped.  Not combinable with --dpm-memory.
+//   --dpm-tabu-parts P  v8 (EXPERIMENTAL): with --dpm-tabu, which of the two rules is active: draw (start-set draws avoid tabu sets; intensification is never skipped),
+//                       skip (draws unchanged; intensification skipped when the diversification phase ends on a tabu set) or both (default = plain --dpm-tabu).
+static bool g_dpm_prune = false, g_dpm_mem = false, g_dpm_tabu = false;
+static bool g_tabu_draw = true, g_tabu_skip = true, g_tabu_parts_set = false;    // v8: parts of --dpm-tabu (default both); --dpm-tabu-parts draw|skip|both
+static int g_dpm_K = 0;
+static double g_dpm_eps = 0.25;
+static long g_dpm_cap = 200000;                       // largest number of subsets that is enumerated
+struct Dpm {
+    bool on = false;
+    vector<vector<int>> sets;                         // sorted by lb
+    vector<double> lb;
+    vector<char> used;
+    long used_count = 0;
+    long draws = 0, top_draws = 0, uni_draws = 0, pruned = 0, mem_skips = 0, fallback = 0, resets = 0;
+    double build_s = 0.0;
+};
+static Dpm DP;
+struct DpmTabu {
+    std::map<vector<int>, long> idx;                  // sorted depot set -> rank in DP.sets
+    vector<char> flag;                                // tabu flag by rank
+    long count = 0, adds = 0, skipped_int = 0, draw_skips = 0, resets = 0, cycles = 0;
+    vector<std::pair<int, string>> events;            // (GRASP iteration, text) for the sidecar
+};
+static DpmTabu TB;
+static string set_text(const vector<int> &v) { string s; for (size_t i = 0; i < v.size(); i++) { if (i) s += " "; s += std::to_string(v[i]); } return s; }
+static bool tabu_has(vector<int> s) { std::sort(s.begin(), s.end()); auto it = TB.idx.find(s); return it != TB.idx.end() && TB.flag[it->second]; }
+static void tabu_add(vector<int> s, int iter, const char *why) {
+    std::sort(s.begin(), s.end());
+    auto it = TB.idx.find(s);
+    if (it == TB.idx.end() || TB.flag[it->second]) return;
+    TB.flag[it->second] = 1; TB.count++; TB.adds++;
+    TB.events.push_back({iter, string("add:") + why + ":" + set_text(s)});
+}
+static void dpm_build(const Inst &I) {
+    const double t0 = now_cpu();
+    const int k = std::max(1, std::min(I.Ng, I.m)), m = I.m, n = I.n;
+    double ncomb = 1.0;
+    for (int i = 1; i <= k; i++) ncomb = ncomb * (m - k + i) / i;
+    if (ncomb > (double)g_dpm_cap) die("--dpm-*: C(" + std::to_string(m) + "," + std::to_string(k) + ") = " + std::to_string((long long)ncomb) + " subsets exceed --dpm-cap " + std::to_string(g_dpm_cap));
+    vector<double> dc((size_t)m * n);
+    for (int d = 0; d < m; d++) for (int c = 0; c < n; c++) dc[(size_t)d * n + c] = I.d(d, m + c);
+    vector<vector<int>> sets;
+    vector<double> lb;
+    vector<int> idx(k);
+    for (int i = 0; i < k; i++) idx[i] = i;
+    for (;;) {
+        double s = 0.0;
+        for (int c = 0; c < n; c++) {
+            double b = dc[(size_t)idx[0] * n + c];
+            for (int j = 1; j < k; j++) { double v = dc[(size_t)idx[j] * n + c]; if (v < b) b = v; }
+            s += b;
+        }
+        sets.push_back(idx); lb.push_back(s);
+        int i = k - 1;
+        while (i >= 0 && idx[i] == m - k + i) i--;
+        if (i < 0) break;
+        idx[i]++;
+        for (int j = i + 1; j < k; j++) idx[j] = idx[j - 1] + 1;
+    }
+    vector<size_t> ord(sets.size());
+    for (size_t i = 0; i < ord.size(); i++) ord[i] = i;
+    std::stable_sort(ord.begin(), ord.end(), [&](size_t a, size_t b) { return lb[a] < lb[b]; });      // stable: ties keep lexicographic order
+    DP.sets.resize(sets.size()); DP.lb.resize(sets.size());
+    for (size_t i = 0; i < ord.size(); i++) { DP.sets[i] = sets[ord[i]]; DP.lb[i] = lb[ord[i]]; }
+    DP.used.assign(sets.size(), 0); DP.used_count = 0;
+    if (g_dpm_tabu) { TB.flag.assign(sets.size(), 0); for (size_t i = 0; i < DP.sets.size(); i++) TB.idx[DP.sets[i]] = (long)i; }
+    DP.on = true;
+    DP.build_s = now_cpu() - t0;
+}
+// one start set for a diversification iteration; `incumbent` = cost of the best feasible solution so far (INFINITY before the first one)
+static vector<int> dpm_draw(double incumbent) {
+    const long C = (long)DP.sets.size();
+    DP.draws++;
+    for (int attempt = 0; attempt < 1000; attempt++) {
+        long r = -1;
+        bool top = g_dpm_K > 0 && RNG.choice(1000) >= (int)std::lround(1000.0 * g_dpm_eps);
+        if (top) {
+            const long Kc = std::min<long>(g_dpm_K, C);
+            if (g_dpm_mem) {
+                vector<long> cand;
+                for (long i = 0; i < Kc; i++) if (!DP.used[i]) cand.push_back(i);
+                if (cand.empty()) top = false; else r = cand[RNG.choice((int)cand.size())];
+            } else r = RNG.choice((int)Kc);
+        }
+        if (!top) {
+            if (g_dpm_mem) {
+                if (DP.used_count >= C) { std::fill(DP.used.begin(), DP.used.end(), 0); DP.used_count = 0; DP.resets++; }
+                for (int t = 0; t < 200 && r < 0; t++) { long x = RNG.choice((int)C); if (!DP.used[x]) r = x; else DP.mem_skips++; }
+                if (r < 0) { vector<long> un; for (long i = 0; i < C; i++) if (!DP.used[i]) un.push_back(i); r = un[RNG.choice((int)un.size())]; }
+            } else r = RNG.choice((int)C);
+        }
+        if (g_dpm_prune && std::isfinite(incumbent) && DP.lb[r] >= incumbent - 1e-9) { DP.pruned++; continue; }
+        if (g_dpm_mem && !DP.used[r]) { DP.used[r] = 1; DP.used_count++; }
+        if (top) DP.top_draws++; else DP.uni_draws++;
+        return DP.sets[r];
+    }
+    DP.fallback++;                                    // (practically) every drawn set is pruned: the bound proves no start set can improve the incumbent
+    return DP.sets[RNG.choice((int)C)];
+}
+
+// v8: dpm_draw with the converged-set tabu (same two-component draw; tabu sets are never returned; the tabu list is cleared if every set is tabu)
+static vector<int> dpm_draw_tabu(double incumbent) {
+    const long C = (long)DP.sets.size();
+    DP.draws++;
+    for (int attempt = 0; attempt < 1000; attempt++) {
+        long r = -1;
+        bool top = g_dpm_K > 0 && RNG.choice(1000) >= (int)std::lround(1000.0 * g_dpm_eps);
+        if (top) {
+            const long Kc = std::min<long>(g_dpm_K, C);
+            vector<long> cand;
+            for (long i = 0; i < Kc; i++) if (!TB.flag[i]) cand.push_back(i);
+            if (cand.empty()) top = false; else r = cand[RNG.choice((int)cand.size())];
+        }
+        if (!top) {
+            if (TB.count >= C) { std::fill(TB.flag.begin(), TB.flag.end(), 0); TB.count = 0; TB.resets++; }
+            for (int t = 0; t < 200 && r < 0; t++) { long x = RNG.choice((int)C); if (!TB.flag[x]) r = x; else TB.draw_skips++; }
+            if (r < 0) { vector<long> un; for (long i = 0; i < C; i++) if (!TB.flag[i]) un.push_back(i); r = un[RNG.choice((int)un.size())]; }
+        }
+        if (g_dpm_prune && std::isfinite(incumbent) && DP.lb[r] >= incumbent - 1e-9) { DP.pruned++; continue; }
+        if (top) DP.top_draws++; else DP.uni_draws++;
+        return DP.sets[r];
+    }
+    DP.fallback++;
+    return DP.sets[RNG.choice((int)C)];
+}
+
+static vector<int> initial_allowed(bool div_mode, const vector<int> &best_depots_div, double incumbent = INFINITY) {
     const Inst &I = *G;
     int max_open = std::max(1, std::min(I.Ng, I.m));
     vector<int> res;
+    if (DP.on && (div_mode || best_depots_div.empty())) {
+        res = (g_dpm_tabu && g_tabu_draw) ? dpm_draw_tabu(incumbent) : dpm_draw(incumbent);
+        RNG.order('A', res);
+        return res;
+    }
     if (div_mode || best_depots_div.empty()) {
         vector<int> pop(I.m);
         for (int i = 0; i < I.m; i++) pop[i] = i;
@@ -1363,7 +1537,9 @@ static vector<int> initial_allowed(bool div_mode, const vector<int> &best_depots
 static double T_CONSTR = 0.0, T_LS = 0.0;
 struct IterLog { int k; bool div, feas, improved; double cost, best, cpu; int nroutes; vector<int> open; };
 struct TraceRow { int iter; double cpu, best; };
+struct PoolLog { int call, iter; double cpu, sp_cpu, before, after, lb; long routes, nodes; int sets, improved, complete; };
 struct RunInfo {
+    vector<PoolLog> pool_logs;
     int iters = 0, last_impr_iter = -1, best_iter = -1;
     double last_impr_cpu = 0.0;
     string stop = "none";
@@ -1372,6 +1548,470 @@ struct RunInfo {
     long best_iter_applied[NALL] = {0};
     double best_iter_gain_lat[NALL] = {0};
 };
+static void pool_sp_call(int iter, double c0, bool &have_best, Sol &best_sol, double &best_cost, int &since, RunInfo &RI) {
+    if (!have_best || PL->R.empty()) return;
+    const double t0 = now_cpu(), deadline = t0 + g_pool_tl, before = best_cost;
+    vector<std::pair<double, vector<int>>> cand;
+    for (auto &kv : g_set_best) if ((int)kv.first.size() == G->Ng || (g_atmost && (int)kv.first.size() <= G->Ng)) cand.push_back({kv.second, kv.first});
+    std::sort(cand.begin(), cand.end(), [](const std::pair<double, vector<int>> &a, const std::pair<double, vector<int>> &b) { return a.first < b.first; });
+    long nodes = 0; double lb = -INFINITY; int tried = 0, comp = 1, imp = 0;
+    for (size_t ci = 0; ci < cand.size() && (int)ci < g_pool_sets; ci++) {
+        if (now_cpu() >= deadline) { comp = 0; break; }
+        psp::SPResult r = PL->solve_set(cand[ci].second, best_cost, deadline, g_pool_nodes);
+        tried++; nodes += r.nodes; if (!r.complete) comp = 0; lb = std::max(lb, r.lb);
+        if (r.improved) {
+            Sol s;
+            for (int j : r.sel) { Route rt; rt.depot = PL->R[j].depot; rt.path = PL->R[j].path; rt.load = path_load(rt.path.data(), rt.path.size()); s.routes.push_back(rt); }
+            if (check_validity(s) && s.cost < best_cost - 1e-9) {
+                best_sol = s; best_cost = s.cost; imp = 1; since = 0;
+                const double now = now_cpu() - c0;
+                RI.last_impr_iter = iter; RI.last_impr_cpu = now; RI.best_iter = iter; RI.trace.push_back({iter, now, best_cost});
+                auto it = g_set_best.find(s.open); if (it == g_set_best.end() || s.cost < it->second) g_set_best[s.open] = s.cost;
+            }
+        }
+    }
+    PL->new_since_call = 0;
+    RI.pool_logs.push_back({(int)RI.pool_logs.size() + 1, iter, now_cpu() - c0, now_cpu() - t0, before, best_cost, lb, (long)PL->R.size(), nodes, tried, imp, comp});
+}
+// ---- v8 (EXPERIMENTAL; default off): --pr-elite E
+// Assignment path relinking.  An elite list (at most E feasible GRASP-iteration solutions with pairwise different customer->depot assignments, cheapest kept) is
+// maintained.  At the end of every diversification/intensification cycle the incumbent and a random elite with a different assignment are relinked in a random
+// direction: the customers whose depot differs are moved (random order) from the initiating solution towards the guiding solution's depots (cheapest insertion
+// into a route of the target depot, capacity violations allowed -> strategic oscillation repairs them); only elites with the SAME open depot set as the incumbent
+// are used as guides (the moves change the customer->depot assignment inside one depot set); the half-way and the final point are improved by
+// local_search_ils (as every GRASP iteration is).  Results enter the elite list, the route pool and (if better) the incumbent.
+struct PRStats { long calls = 0, nodiff = 0, skipped_time = 0, points = 0, feasible_points = 0, improved_best = 0, elite_adds = 0; };
+static PRStats PRS;
+static int g_pr_elite = 0;
+static vector<Sol> g_elite;
+struct PRLog { int iter, dir, ndiff, nmoved; double c1, c2, before, after, cpu; };
+static vector<PRLog> g_pr_log;
+static vector<int> assign_of(const Sol &s) {
+    vector<int> a(G->n, -1);
+    for (auto &r : s.routes) for (int c : r.path) a[c] = r.depot;
+    return a;
+}
+static void elite_add(const Sol &s) {
+    if (g_pr_elite <= 0) return;
+    const vector<int> a = assign_of(s);
+    for (auto &e : g_elite) if (assign_of(e) == a) { if (s.cost < e.cost - 1e-9) e = s; return; }
+    g_elite.push_back(s); PRS.elite_adds++;
+    if ((int)g_elite.size() > g_pr_elite) {
+        size_t w = 0;
+        for (size_t i = 1; i < g_elite.size(); i++) if (g_elite[i].cost > g_elite[w].cost) w = i;
+        g_elite.erase(g_elite.begin() + w);
+    }
+}
+// move customer c into a route of depot d: cheapest insertion among routes with room; if none has room, the route with the smallest overload
+static bool pr_move(Sol &W, int c, int d) {
+    const Inst &I = *G;
+    int src = -1, spos = -1;
+    for (size_t r = 0; r < W.routes.size() && src < 0; r++)
+        for (size_t p = 0; p < W.routes[r].path.size(); p++) if (W.routes[r].path[p] == c) { src = (int)r; spos = (int)p; break; }
+    if (src < 0 || W.routes[src].depot == d) return false;
+    int bt = -1, bp = -1;
+    double bover = INFINITY, bdelta = INFINITY;
+    for (size_t t = 0; t < W.routes.size(); t++) {
+        Route &tr = W.routes[t];
+        if ((int)t == src || tr.depot != d || tr.path.empty()) continue;
+        const double over = std::max(0.0, tr.load + I.dem[c] - I.Q);
+        const double old_lat = eval_lat(tr.depot, tr.path.data(), tr.path.size());
+        vector<int> np;
+        for (size_t pos = 0; pos <= tr.path.size(); pos++) {
+            np.assign(tr.path.begin(), tr.path.begin() + pos);
+            np.push_back(c);
+            np.insert(np.end(), tr.path.begin() + pos, tr.path.end());
+            const double delta = eval_lat(tr.depot, np.data(), np.size()) - old_lat;
+            if (over < bover - 1e-9 || (std::fabs(over - bover) <= 1e-9 && delta < bdelta)) { bover = over; bdelta = delta; bt = (int)t; bp = (int)pos; }
+        }
+    }
+    if (bt < 0) return false;
+    Route &sr = W.routes[src];
+    sr.path.erase(sr.path.begin() + spos);
+    sr.load = path_load(sr.path.data(), sr.path.size());
+    Route &tr = W.routes[bt];
+    tr.path.insert(tr.path.begin() + bp, c);
+    tr.load = path_load(tr.path.data(), tr.path.size());
+    return true;
+}
+static vector<Sol> pr_relink(const Sol &a, const Sol &b, PRLog &lg) {
+    vector<Sol> res;
+    const vector<int> da = assign_of(a), db = assign_of(b);
+    vector<int> D;
+    for (int c = 0; c < G->n; c++) if (da[c] != db[c]) D.push_back(c);
+    lg.ndiff = (int)D.size();
+    if (D.size() < 2) return res;
+    D = RNG.sample(D, (int)D.size());
+    const int T = (int)D.size();
+    vector<int> pts(1, (T + 1) / 2);
+    if (T > pts[0]) pts.push_back(T);
+    Sol W = a;
+    size_t pi = 0;
+    int moved = 0;
+    for (int t = 0; t < T && pi < pts.size(); t++) {
+        if (pr_move(W, D[t], db[D[t]])) moved++;
+        if (t + 1 == pts[pi]) {
+            Sol s = W;
+            drop_empty(s);
+            for (auto &r : s.routes) r.load = path_load(r.path.data(), r.path.size());
+            calculate_cost(s);
+            PRS.points++;
+            Sol r = local_search_ils(s);
+            if (check_validity(r)) { PRS.feasible_points++; res.push_back(r); }
+            else r.cost = INFINITY;
+            (pi == 0 ? lg.c1 : lg.c2) = r.cost;
+            pi++;
+        }
+    }
+    lg.nmoved = moved;
+    return res;
+}
+static void pr_step(int k, bool have_best, Sol &best_sol, double &best_cost, int &since, RunInfo &RI, double c0, double tlimit, double tl_eff) {
+    if (g_pr_elite <= 0 || !have_best || g_elite.size() < 2) return;
+    const double now = now_cpu() - c0;
+    if (tlimit > 0 && now + 2.5 * (now / std::max(1, k + 1)) > tl_eff) { PRS.skipped_time++; return; }
+    const vector<int> ab = assign_of(best_sol);
+    vector<int> cand;
+    for (size_t i = 0; i < g_elite.size(); i++) if (g_elite[i].open == best_sol.open && assign_of(g_elite[i]) != ab) cand.push_back((int)i);   // same open depot set, different assignment
+    if (cand.empty()) { PRS.nodiff++; return; }
+    const int gi = cand[RNG.choice((int)cand.size())];
+    const int dir = RNG.choice(2);
+    const Sol A = dir == 0 ? best_sol : g_elite[gi], B = dir == 0 ? g_elite[gi] : best_sol;
+    PRLog lg{k, dir, 0, 0, NAN, NAN, best_cost, best_cost, 0.0};
+    PRS.calls++;
+    vector<Sol> res = pr_relink(A, B, lg);
+    for (auto &r : res) {
+        if (g_pool_on) pool_add_sol(r);
+        elite_add(r);
+        if (r.cost < best_cost - 1e-9) {
+            best_sol = r; best_cost = r.cost; since = 0; PRS.improved_best++;
+            const double t = now_cpu() - c0;
+            RI.last_impr_iter = k; RI.last_impr_cpu = t; RI.best_iter = k; RI.trace.push_back({k, t, best_cost});
+        }
+    }
+    lg.after = best_cost; lg.cpu = now_cpu() - c0 - now;
+    g_pr_log.push_back(lg);
+}
+// ---- v9 (EXPERIMENTAL; default off): --eax-split F
+// Memetic phase after Zou, Hao & Wu (2024, RLHEA): the first fraction F of the usable CPU budget is the unchanged B1 search (GRASP + RVND-SO + ILS + depot layer);
+// every feasible GRASP-iteration solution enters a population of at most --eax-pop members (fitness = psi * quality + (1-psi) * distance to the nearest member,
+// psi = 0.55, arc distance IDist; duplicates refused; the best member is never removed).  In the remaining time, each generation draws three parents, builds
+// the offspring with the multi-parent edge assembly crossover (MPEAX: AB-cycles of the differing arcs of two parents on a directed graph whose depots are merged
+// into one node, E-set = one random cycle plus all cycles that share a customer with it, applied to the first parent; subtours are inserted into the cheapest
+// arc; then the result is recombined in the same way with the third parent), repairs the route count (concatenate the lightest route) and the number of open
+// depots (keep the Ng most frequent among the parents or Ng random ones; orphan routes go to the nearest kept depot), and improves it with the engine's local
+// search (RVND-SO; capacity is not enforced by the crossover, the strategic oscillation repairs it; --eax-ils K adds the ILS).  Children enter the population,
+// and (if within 1 + --eax-pool-theta of the best) the route pool.  No mutation, no population restart, no Q-learning (not part of this test).
+static double g_eax_split = 0.0;
+static int g_eax_pop = 20, g_eax_esc = 12, g_eax_ils = 0;
+static double g_eax_psi = 0.55, g_eax_pool_theta = 0.01;
+struct Arcs { vector<int> pred, succ, lab; int nr = 0; };      // pred/succ: customer or -1 (= depot node); lab[c] = depot of the route when pred[c] == -1
+static Arcs arcs_of(const Sol &s) {
+    const int n = G->n;
+    Arcs a; a.pred.assign(n, -2); a.succ.assign(n, -2); a.lab.assign(n, -1);
+    for (auto &r : s.routes) {
+        if (r.path.empty()) continue;
+        a.nr++;
+        for (size_t k = 0; k < r.path.size(); k++) {
+            const int c = r.path[k];
+            a.pred[c] = k ? r.path[k - 1] : -1;
+            a.succ[c] = k + 1 < r.path.size() ? r.path[k + 1] : -1;
+            if (k == 0) a.lab[c] = r.depot;
+        }
+    }
+    return a;
+}
+static int idist(const Arcs &a, const Arcs &b) {                // |E_a| - |E_a and E_b|  (customer arcs, labelled start arcs, end arcs)
+    int common = 0;
+    for (int c = 0; c < G->n; c++) {
+        if (a.pred[c] == b.pred[c] && (a.pred[c] >= 0 || a.lab[c] == b.lab[c])) common++;
+        if (a.succ[c] < 0 && b.succ[c] < 0) common++;
+    }
+    return G->n + a.nr - common;
+}
+struct PopMem { Sol s; Arcs a; };
+static vector<PopMem> POP;
+struct EaxStats { long gens = 0, attempts = 0, fail_struct = 0, dup = 0, rejected = 0, invalid = 0, inserted = 0, improved_best = 0, pool_adds = 0, fail_streak_stop = 0, cross_nodiff = 0, cycles = 0, subtours = 0;
+                  double ls_cpu = 0.0, start_cpu = -1.0, best_at_start = NAN; };
+static EaxStats EXS;
+struct EaxRow { long gen; double cpu, cost, pa, pb, pc, best; int nd1, nd2, nsub, inserted; };
+static vector<EaxRow> g_eax_rows;
+// returns 0 = duplicate of a member (refused), 1 = entered but was the worst-fitness member (removed again), 2 = entered the population
+static int pop_add(const Sol &s) {
+    Arcs a = arcs_of(s);
+    for (auto &m : POP) if (idist(a, m.a) == 0 && idist(m.a, a) == 0) return 0;
+    POP.push_back({s, a});
+    const int P = (int)POP.size();
+    if (P <= g_eax_pop) return 2;
+    vector<int> pd(P, 1 << 30);
+    for (int i = 0; i < P; i++) for (int j = 0; j < P; j++) if (i != j) pd[i] = std::min(pd[i], idist(POP[i].a, POP[j].a));
+    double fmin = INFINITY, fmax = -INFINITY; int pmin = 1 << 30, pmax = -1, bi = 0;
+    for (int i = 0; i < P; i++) {
+        fmin = std::min(fmin, POP[i].s.cost); fmax = std::max(fmax, POP[i].s.cost);
+        pmin = std::min(pmin, pd[i]); pmax = std::max(pmax, pd[i]);
+        if (POP[i].s.cost < POP[bi].s.cost) bi = i;
+    }
+    int worst = -1; double wfit = INFINITY;
+    for (int i = 0; i < P; i++) {
+        if (i == bi) continue;
+        const double q = fmax > fmin ? (fmax - POP[i].s.cost) / (fmax - fmin) : 1.0;
+        const double d = pmax > pmin ? (double)(pd[i] - pmin) / (double)(pmax - pmin) : 1.0;
+        const double fit = g_eax_psi * q + (1.0 - g_eax_psi) * d;
+        if (fit < wfit - 1e-12 || (std::fabs(fit - wfit) <= 1e-12 && worst >= 0 && POP[i].s.cost > POP[worst].s.cost)) { wfit = fit; worst = i; }
+    }
+    const bool survived = worst != P - 1;
+    POP.erase(POP.begin() + worst);
+    return survived ? 2 : 1;
+}
+// one edge-assembly crossover  A (+) B  ->  out (structure only: routes with depot labels; capacity and the number of depots are repaired later).
+// AB-cycles alternate a forward arc of A and a backward arc of B, so that every customer keeps one predecessor and one successor; the depot node is merged.
+static bool eax_cross(const Arcs &A, const Arcs &B, Sol &out, int &ndiff, int &nsub) {
+    const Inst &I = *G;
+    const int n = I.n;
+    ndiff = 0; nsub = 0;
+    // arc ids: id < n : the arc entering customer id ; id >= n : the arc leaving customer id - n towards the depot
+    vector<char> inD(n), outD(n);
+    for (int c = 0; c < n; c++) {
+        inD[c] = !(A.pred[c] == B.pred[c] && (A.pred[c] >= 0 || A.lab[c] == B.lab[c]));
+        outD[c] = A.succ[c] != B.succ[c];
+    }
+    auto inEA = [&](int id) { return id < n ? inD[id] != 0 : (outD[id - n] && A.succ[id - n] < 0); };
+    auto tailA = [&](int id) { return id < n ? A.pred[id] : id - n; };
+    auto tailB = [&](int id) { return id < n ? B.pred[id] : id - n; };
+    auto headOf = [&](int id) { return id < n ? id : -1; };
+    vector<char> usedA(2 * n, 0), usedB(2 * n, 0), deadA(2 * n, 0);
+    int totA = 0;
+    for (int id = 0; id < 2 * n; id++) if (inEA(id)) totA++;
+    ndiff = totA;
+    struct Cyc { vector<int> a, b; vector<int> nodes; };
+    vector<Cyc> cycles;
+    long guard = 0;
+    while (true) {
+        vector<int> cand;
+        for (int id = 0; id < 2 * n; id++) if (inEA(id) && !usedA[id] && !deadA[id]) cand.push_back(id);
+        if (cand.empty()) break;
+        const int a1 = cand[RNG.choice((int)cand.size())];
+        const int s = tailA(a1);
+        Cyc cy;
+        cy.a.push_back(a1); usedA[a1] = 1;
+        bool closed = false, fail = false;
+        int cur = a1;
+        for (int step = 0; step < 4 * n + 8; step++) {
+            const int y = headOf(cur);
+            int bid = -1;
+            if (y >= 0) { if (inD[y] && !usedB[y]) bid = y; }
+            else {
+                vector<int> bc;
+                for (int c = 0; c < n; c++) if (outD[c] && B.succ[c] < 0 && !usedB[n + c]) bc.push_back(n + c);
+                if (!bc.empty()) bid = bc[RNG.choice((int)bc.size())];
+            }
+            if (bid < 0) { fail = true; break; }
+            usedB[bid] = 1; cy.b.push_back(bid);
+            const int w = tailB(bid);
+            if (w == s) { closed = true; break; }
+            int aid = -1;
+            if (w >= 0) {
+                const int id = A.succ[w] >= 0 ? A.succ[w] : n + w;
+                if (outD[w] && !usedA[id]) aid = id;
+            } else {
+                vector<int> ac;
+                for (int c = 0; c < n; c++) if (inD[c] && A.pred[c] < 0 && !usedA[c]) ac.push_back(c);
+                if (!ac.empty()) aid = ac[RNG.choice((int)ac.size())];
+            }
+            if (aid < 0) { fail = true; break; }
+            usedA[aid] = 1; cy.a.push_back(aid); cur = aid;
+        }
+        if (!closed || fail) {
+            for (int id : cy.a) usedA[id] = 0;
+            for (int id : cy.b) usedB[id] = 0;
+            deadA[a1] = 1;
+            continue;
+        }
+        for (int id : cy.a) { const int t = tailA(id), h = headOf(id); if (t >= 0) cy.nodes.push_back(t); if (h >= 0) cy.nodes.push_back(h); }
+        for (int id : cy.b) { const int t = tailB(id), h = headOf(id); if (t >= 0) cy.nodes.push_back(t); if (h >= 0) cy.nodes.push_back(h); }
+        std::sort(cy.nodes.begin(), cy.nodes.end());
+        cy.nodes.erase(std::unique(cy.nodes.begin(), cy.nodes.end()), cy.nodes.end());
+        cycles.push_back(std::move(cy));
+        if (++guard > 4 * n) break;
+    }
+    EXS.cycles += (long)cycles.size();
+    // E-set
+    vector<char> remA(2 * n, 0), addB(2 * n, 0);
+    if (cycles.empty()) EXS.cross_nodiff++;
+    else {
+        const int k0 = RNG.choice((int)cycles.size());
+        for (size_t k = 0; k < cycles.size(); k++) {
+            bool take = (int)k == k0;
+            if (!take) {
+                const vector<int> &x = cycles[k0].nodes, &y = cycles[k].nodes;
+                size_t i = 0, j = 0;
+                while (i < x.size() && j < y.size()) { if (x[i] == y[j]) { take = true; break; } if (x[i] < y[j]) i++; else j++; }
+            }
+            if (take) { for (int id : cycles[k].a) remA[id] = 1; for (int id : cycles[k].b) addB[id] = 1; }
+        }
+    }
+    // child arcs
+    Arcs C; C.pred.assign(n, -2); C.succ.assign(n, -2); C.lab.assign(n, -1);
+    for (int c = 0; c < n; c++) {
+        if (remA[c]) { C.pred[c] = B.pred[c]; C.lab[c] = B.lab[c]; } else { C.pred[c] = A.pred[c]; C.lab[c] = A.lab[c]; }
+        const int oid = A.succ[c] >= 0 ? A.succ[c] : n + c;
+        C.succ[c] = remA[oid] ? B.succ[c] : A.succ[c];
+    }
+    // routes from the start arcs, then the subtours
+    out = Sol();
+    vector<char> seen(n, 0);
+    for (int c = 0; c < n; c++) {
+        if (C.pred[c] != -1) continue;
+        Route r; r.depot = C.lab[c];
+        int x = c, cnt = 0;
+        while (x >= 0 && cnt <= n) { if (seen[x]) return false; seen[x] = 1; r.path.push_back(x); x = C.succ[x]; cnt++; }
+        if (x >= 0) return false;
+        out.routes.push_back(std::move(r));
+    }
+    for (int c = 0; c < n; c++) {
+        if (seen[c]) continue;
+        vector<int> cyc; int x = c, cnt = 0;
+        while (!seen[x] && cnt <= n) { seen[x] = 1; cyc.push_back(x); x = C.succ[x]; cnt++; if (x < 0) return false; }
+        if (x != c) return false;
+        nsub++; EXS.subtours++;
+        if (out.routes.empty()) return false;
+        const int L = (int)cyc.size();
+        double bd = INFINITY; int br = -1, bp = -1, brot = 0;
+        for (int rot = 0; rot < L; rot++) {
+            const int first = cyc[rot], last = cyc[(rot + L - 1) % L];
+            const double cut = I.d(I.m + last, I.m + first);
+            for (size_t r = 0; r < out.routes.size(); r++) {
+                const Route &R = out.routes[r];
+                const int K = (int)R.path.size();
+                for (int pos = 0; pos <= K; pos++) {
+                    const int xn = pos == 0 ? R.depot : I.m + R.path[pos - 1];
+                    double delta = I.d(xn, I.m + first) - cut;
+                    if (pos < K) delta += I.d(I.m + last, I.m + R.path[pos]) - I.d(xn, I.m + R.path[pos]);
+                    if (delta < bd) { bd = delta; br = (int)r; bp = pos; brot = rot; }
+                }
+            }
+        }
+        vector<int> chain;
+        for (int k = 0; k < L; k++) chain.push_back(cyc[(brot + k) % L]);
+        Route &R = out.routes[br];
+        R.path.insert(R.path.begin() + bp, chain.begin(), chain.end());
+    }
+    for (auto &r : out.routes) r.load = path_load(r.path.data(), r.path.size());
+    calculate_cost(out);
+    return true;
+}
+// number of routes <= Nv (concatenate the lightest route to the route it is closest to), number of open depots = Ng
+static bool eax_repair(Sol &s, const vector<int> &freq) {
+    const Inst &I = *G;
+    drop_empty(s);
+    while ((int)s.routes.size() > I.Nv) {
+        size_t li = 0;
+        for (size_t r = 1; r < s.routes.size(); r++) if (s.routes[r].load < s.routes[li].load) li = r;
+        Route L = s.routes[li];
+        s.routes.erase(s.routes.begin() + li);
+        size_t bt = 0; double bd = INFINITY;
+        for (size_t r = 0; r < s.routes.size(); r++) { const double d = I.d(I.m + s.routes[r].path.back(), I.m + L.path.front()); if (d < bd) { bd = d; bt = r; } }
+        s.routes[bt].path.insert(s.routes[bt].path.end(), L.path.begin(), L.path.end());
+        s.routes[bt].load += L.load;
+    }
+    auto depots = [&]() { std::set<int> od; for (auto &r : s.routes) od.insert(r.depot); return od; };
+    std::set<int> od = depots();
+    const int Ng = I.Ng;
+    if ((int)od.size() > Ng) {
+        vector<int> ds(od.begin(), od.end()), keep;
+        if (RNG.choice(2) == 0) {                                   // method 1: the Ng most frequent depots among the parents (ties: random)
+            vector<int> perm(ds.size()); for (size_t i = 0; i < perm.size(); i++) perm[i] = (int)i;
+            perm = RNG.sample(perm, (int)perm.size());
+            std::stable_sort(perm.begin(), perm.end(), [&](int x, int y) { return freq[ds[x]] > freq[ds[y]]; });
+            for (int i = 0; i < Ng; i++) keep.push_back(ds[perm[i]]);
+        } else keep = RNG.sample(ds, Ng);                           // method 2: Ng random ones
+        for (auto &r : s.routes) {
+            if (std::find(keep.begin(), keep.end(), r.depot) != keep.end()) continue;
+            int bd = keep[0]; double bv = INFINITY;
+            for (int d : keep) { const double v = I.d(d, I.m + r.path.front()); if (v < bv) { bv = v; bd = d; } }
+            r.depot = bd;
+        }
+    }
+    od = depots();
+    while (!g_atmost && (int)od.size() < Ng) {
+        vector<int> freeD;
+        for (int d = 0; d < I.m; d++) if (!od.count(d)) freeD.push_back(d);
+        if (freeD.empty()) return false;
+        const int nd = freeD[RNG.choice((int)freeD.size())];
+        std::map<int, int> cntr;
+        for (auto &r : s.routes) cntr[r.depot]++;
+        vector<int> donors;
+        for (size_t r = 0; r < s.routes.size(); r++) if (cntr[s.routes[r].depot] >= 2) donors.push_back((int)r);
+        if (!donors.empty()) s.routes[donors[RNG.choice((int)donors.size())]].depot = nd;
+        else {                                                      // every depot has one route: split the longest route
+            if ((int)s.routes.size() >= I.Nv) return false;
+            size_t li = 0;
+            for (size_t r = 1; r < s.routes.size(); r++) if (s.routes[r].path.size() > s.routes[li].path.size()) li = r;
+            if (s.routes[li].path.size() < 2) return false;
+            const int cut = 1 + RNG.choice((int)s.routes[li].path.size() - 1);
+            Route nr; nr.depot = nd; nr.path.assign(s.routes[li].path.begin() + cut, s.routes[li].path.end());
+            s.routes[li].path.resize(cut);
+            s.routes[li].load = path_load(s.routes[li].path.data(), s.routes[li].path.size());
+            nr.load = path_load(nr.path.data(), nr.path.size());
+            s.routes.push_back(nr);
+        }
+        od = depots();
+    }
+    for (auto &r : s.routes) r.load = path_load(r.path.data(), r.path.size());
+    calculate_cost(s);
+    return (g_atmost ? (int)s.open.size() <= Ng : (int)s.open.size() == Ng) && (int)s.routes.size() <= I.Nv;
+}
+static bool struct_ok(const Sol &s) {                           // every customer exactly once, <= Nv routes, Ng open depots (capacity is not required)
+    vector<char> seen(G->n, 0); size_t tot = 0; int nr = 0;
+    std::set<int> od;
+    for (auto &r : s.routes) { if (r.path.empty()) continue; nr++; od.insert(r.depot); for (int c : r.path) { if (c < 0 || c >= G->n || seen[c]) return false; seen[c] = 1; tot++; } }
+    return tot == (size_t)G->n && nr <= G->Nv && (g_atmost ? (int)od.size() <= G->Ng : (int)od.size() == G->Ng);
+}
+static void eax_phase(double c0, double tl_eff, bool &have_best, Sol &best_sol, double &best_cost, int &since, RunInfo &RI) {
+    EXS.start_cpu = now_cpu() - c0;
+    EXS.best_at_start = best_cost;
+    long fail_streak = 0;
+    while (now_cpu() - c0 < tl_eff) {
+        EXS.gens++;
+        vector<int> idx(POP.size());
+        for (size_t i = 0; i < idx.size(); i++) idx[i] = (int)i;
+        const vector<int> par = RNG.sample(idx, 3);
+        const PopMem &PA = POP[par[0]], &PB = POP[par[1]], &PC = POP[par[2]];
+        const double pcostA = PA.s.cost, pcostB = PB.s.cost, pcostC = PC.s.cost;
+        vector<int> freq(G->m, 0);
+        for (int p : par) for (int d : POP[p].s.open) freq[d]++;
+        EXS.attempts++;
+        Sol O, F;
+        int nd1 = 0, nd2 = 0, ns1 = 0, ns2 = 0;
+        bool ok = eax_cross(PA.a, PB.a, O, nd1, ns1);
+        if (ok) {
+            Arcs ao = arcs_of(O);
+            ok = eax_cross(ao, PC.a, F, nd2, ns2);
+        }
+        if (ok) ok = eax_repair(F, freq);
+        if (ok && g_check && !struct_ok(F)) die("eax: offspring structure invalid");
+        if (!ok) {
+            EXS.fail_struct++;
+            if (++fail_streak > 300) { EXS.fail_streak_stop++; break; }
+            continue;
+        }
+        fail_streak = 0;
+        const double t1 = now_cpu();
+        Sol r = local_search_ils(F, g_eax_esc, g_eax_ils);
+        EXS.ls_cpu += now_cpu() - t1;
+        if (!check_validity(r)) { EXS.invalid++; continue; }
+        const int pa = pop_add(r);
+        const bool ins = pa == 2;
+        if (pa == 0) EXS.dup++; else if (pa == 1) EXS.rejected++; else EXS.inserted++;
+        if (r.cost < best_cost - 1e-9) {
+            best_sol = r; best_cost = r.cost; have_best = true; since = 0; EXS.improved_best++;
+            const double t = now_cpu() - c0;
+            RI.last_impr_iter = RI.iters + (int)EXS.gens; RI.last_impr_cpu = t; RI.best_iter = RI.last_impr_iter; RI.trace.push_back({RI.last_impr_iter, t, best_cost});
+        }
+        if (g_pool_on && r.cost <= best_cost * (1.0 + g_eax_pool_theta)) { pool_add_sol(r); EXS.pool_adds++; }
+        g_eax_rows.push_back({EXS.gens, now_cpu() - c0, r.cost, pcostA, pcostB, pcostC, best_cost, nd1, nd2, ns1 + ns2, ins ? 1 : 0});
+    }
+}
 static Sol run_grasp(int max_iter, int stall, double tlimit, int alpha_max, RunInfo &RI) {
     bool have_best = false;
     Sol best_sol, current;
@@ -1383,11 +2023,20 @@ static Sol run_grasp(int max_iter, int stall, double tlimit, int alpha_max, RunI
     bool have_div = false;
     double best_cost_div = INFINITY;
     const double c0 = now_cpu();
+    const double tl_eff = (tlimit > 0 && g_pool_on) ? std::max(0.0, tlimit - g_pool_tl) : tlimit;   // v7: the final SP call is paid out of the same CPU budget
+    long next_sp = g_pool_first;
+    double int_best_cost = INFINITY;                  // v8 --dpm-tabu: best feasible solution of the current intensification phase
+    vector<int> int_best_set;
     for (int k = 0;; k++) {
         if (max_iter > 0 && k >= max_iter) { RI.stop = "max_iter"; break; }
         if (stall > 0 && since >= stall) { RI.stop = "stall"; break; }
-        if (tlimit > 0 && now_cpu() - c0 >= tlimit) { RI.stop = "time"; break; }
-        vector<int> allowed = initial_allowed(div_mode, have_div ? best_depots_div : vector<int>());
+        if (tlimit > 0 && now_cpu() - c0 >= tl_eff) { RI.stop = "time"; break; }
+        if (g_eax_split > 0.0 && tlimit > 0 && POP.size() >= 3 && now_cpu() - c0 >= g_eax_split * tl_eff) {      // v9: memetic phase for the rest of the budget
+            eax_phase(c0, tl_eff, have_best, best_sol, best_cost, since, RI);
+            RI.stop = "time";
+            break;
+        }
+        vector<int> allowed = initial_allowed(div_mode, have_div ? best_depots_div : vector<int>(), best_cost);
         const double tc0 = now_cpu();
         current = construct(allowed, alpha_max);
         T_CONSTR += now_cpu() - tc0;
@@ -1397,6 +2046,11 @@ static Sol run_grasp(int max_iter, int stall, double tlimit, int alpha_max, RunI
         current = local_search_ils(current);
         T_LS += now_cpu() - tl0;
         const bool feasible = check_validity(current);
+        if (g_check && feasible) {                                    // --check: latency >= p-median bound of the open set (validity of the depot-layer bound)
+            const Inst &I = *G; double lbs = 0.0;
+            for (int c = 0; c < I.n; c++) { double b = INFINITY; for (int d : current.open) b = std::min(b, I.d(d, I.m + c)); lbs += b; }
+            if (current.cost + 1e-6 < lbs) die("p-median bound violated: cost " + std::to_string(current.cost) + " < LB " + std::to_string(lbs));
+        }
         bool improved = false;
         if (feasible && current.cost < best_cost - 1e-9) {
             best_sol = current; best_cost = current.cost; have_best = true; improved = true; since = 0;
@@ -1414,12 +2068,34 @@ static Sol run_grasp(int max_iter, int stall, double tlimit, int alpha_max, RunI
         }
         RI.logs.push_back({k, div_mode, feasible, improved, current.cost, have_best ? best_cost : NAN, now_cpu() - c0, route_count(current), current.open});
         RI.iters = k + 1;
+        if (g_dpm_tabu && !div_mode && feasible && current.cost < int_best_cost) { int_best_cost = current.cost; int_best_set = current.open; }
+        if (g_pr_elite > 0 && feasible) elite_add(current);
+        if (g_eax_split > 0.0 && feasible) pop_add(current);
+        if (g_pool_on) {
+            if (feasible) pool_add_sol(current);
+            if ((long)(k + 1) >= next_sp) { pool_sp_call(k, c0, have_best, best_sol, best_cost, since, RI); next_sp *= 2; }
+        }
         period++;
-        if (div_mode && period >= max_it_div) { div_mode = false; period = 0; }
+        if (div_mode && period >= max_it_div) {
+            if (g_dpm_tabu && g_tabu_skip && have_div && tabu_has(best_depots_div)) {       // v8: the cycle converged on an already converged set -> no intensification
+                TB.skipped_int++; TB.cycles++;
+                TB.events.push_back({k, string("skip_int:") + set_text(best_depots_div)});
+                period = 0; best_depots_div.clear(); have_div = false; best_cost_div = INFINITY;
+                pr_step(k, have_best, best_sol, best_cost, since, RI, c0, tlimit, tl_eff);
+            } else { div_mode = false; period = 0; int_best_cost = INFINITY; int_best_set.clear(); }
+        }
         else if (!div_mode && period >= max_it_int) {
-            div_mode = true; period = 0; best_depots_div.clear(); have_div = false; best_cost_div = INFINITY;
+            div_mode = true; period = 0;
+            if (g_dpm_tabu) {                                               // v8: the cycle's converged sets become tabu
+                TB.cycles++;
+                if (have_div) tabu_add(best_depots_div, k, "div");
+                if (!int_best_set.empty()) tabu_add(int_best_set, k, "int");
+            }
+            if (!(DP.on && g_dpm_mem)) { best_depots_div.clear(); have_div = false; best_cost_div = INFINITY; }    // --dpm-memory: the elite set survives the cycle
+            pr_step(k, have_best, best_sol, best_cost, since, RI, c0, tlimit, tl_eff);
         }
     }
+    if (g_pool_on) pool_sp_call(RI.iters > 0 ? RI.iters - 1 : 0, c0, have_best, best_sol, best_cost, since, RI);
     return have_best ? best_sol : current;
 }
 
@@ -1517,6 +2193,7 @@ int main(int argc, char **argv) {
     double tlimit = 0.0;
     bool quiet = false, pyrng = true, add_ds = false, list_ops = false, construct_only = false;
     int gran_arg = 0;
+    bool dpm_requested = false;
     for (int i = 1; i < argc; i++) {
         string a = argv[i];
         auto val = [&]() -> string { if (i + 1 >= argc) die("missing value for " + a); return argv[++i]; };
@@ -1533,6 +2210,37 @@ int main(int argc, char **argv) {
         else if (a == "--ils") g_ils = atoi(val().c_str());
         else if (a == "--gran") gran_arg = atoi(val().c_str());
         else if (a == "--atmost") g_atmost = true;
+        else if (a == "--dpm-rank") {                                       // K[,eps]
+            string v = val(); size_t cm = v.find(',');
+            g_dpm_K = atoi(v.substr(0, cm).c_str());
+            if (cm != string::npos) g_dpm_eps = atof(v.substr(cm + 1).c_str());
+            dpm_requested = true;
+        }
+        else if (a == "--dpm-prune") { g_dpm_prune = true; dpm_requested = true; }
+        else if (a == "--dpm-memory") { g_dpm_mem = true; dpm_requested = true; }
+        else if (a == "--dpm-tabu") { g_dpm_tabu = true; dpm_requested = true; }
+        else if (a == "--dpm-tabu-parts") {
+            string v = val(); g_tabu_parts_set = true;
+            if (v == "draw") { g_tabu_draw = true; g_tabu_skip = false; }
+            else if (v == "skip") { g_tabu_draw = false; g_tabu_skip = true; }
+            else if (v == "both") { g_tabu_draw = true; g_tabu_skip = true; }
+            else die("--dpm-tabu-parts must be draw, skip or both");
+        }
+        else if (a == "--pr-elite") g_pr_elite = atoi(val().c_str());
+        else if (a == "--eax-split") g_eax_split = atof(val().c_str());
+        else if (a == "--eax-pop") g_eax_pop = atoi(val().c_str());
+        else if (a == "--eax-psi") g_eax_psi = atof(val().c_str());
+        else if (a == "--eax-esc") g_eax_esc = atoi(val().c_str());
+        else if (a == "--eax-ils") g_eax_ils = atoi(val().c_str());
+        else if (a == "--eax-pool-theta") g_eax_pool_theta = atof(val().c_str());
+        else if (a == "--dpm-cap") g_dpm_cap = atol(val().c_str());
+        else if (a == "--pool-sp") g_pool_on = true;
+        else if (a == "--pool-tl") g_pool_tl = atof(val().c_str());
+        else if (a == "--pool-sets") g_pool_sets = atoi(val().c_str());
+        else if (a == "--pool-first") g_pool_first = atoi(val().c_str());
+        else if (a == "--pool-src") g_pool_src = atoi(val().c_str());
+        else if (a == "--pool-theta") g_pool_theta = atof(val().c_str());
+        else if (a == "--pool-nodes") g_pool_nodes = atol(val().c_str());
         else if (a == "--rcl") rcl = atoi(val().c_str());
         else if (a == "--it-div") g_it_div = atoi(val().c_str());
         else if (a == "--it-int") g_it_int = atoi(val().c_str());
@@ -1580,6 +2288,27 @@ int main(int argc, char **argv) {
     G = &I;
     if (gran_arg < 0) die("--gran must be >= 0");
     build_gran(I, gran_arg);
+    if (dpm_requested) {
+        if (g_atmost) die("--dpm-* cannot be combined with --atmost");
+        if (g_dpm_K < 0 || g_dpm_eps < 0.0 || g_dpm_eps > 1.0) die("--dpm-rank K[,eps]: K >= 0 and 0 <= eps <= 1");
+        if (g_dpm_tabu && g_dpm_mem) die("--dpm-tabu cannot be combined with --dpm-memory");
+        if (g_tabu_parts_set && !g_dpm_tabu) die("--dpm-tabu-parts needs --dpm-tabu");
+        dpm_build(I);
+    }
+    if (g_pr_elite < 0) die("--pr-elite E: E >= 0");
+    if (g_eax_split < 0.0 || g_eax_split >= 1.0) die("--eax-split F: 0 <= F < 1 (0 = off)");
+    if (g_eax_split > 0.0) {
+        if (!(tlimit > 0.0)) die("--eax-split needs --time");
+        if (!g_so) die("--eax-split needs --so (offspring start infeasible)");
+        if (g_eax_pop < 4 || g_eax_esc < 0 || g_eax_ils < 0 || !(g_eax_psi >= 0.0 && g_eax_psi <= 1.0) || g_eax_pool_theta < 0.0) die("--eax-*: invalid value");
+        if (g_pr_elite > 0) die("--eax-split cannot be combined with --pr-elite");
+    }
+    if (g_pool_on) {
+        if (I.n > 1024) die("--pool-sp: n too large");
+        if (g_pool_tl < 0 || g_pool_sets < 1 || g_pool_first < 1 || g_pool_src < 1 || g_pool_src > 2) die("--pool-*: invalid value");
+        psp::Params PP; PP.n = I.n; PP.m = I.m; PP.Nv = I.Nv; PP.Ng = I.Ng; PP.atmost = g_atmost; PP.D = I.D.data(); PP.NN = I.N;
+        PL = new psp::Pool(PP);
+    }
     RNG.gen.seed((unsigned long long)seed);
     if (pyrng) { RNG.pyrng = true; RNG.mt.seed((unsigned long long)seed); }
 
@@ -1605,6 +2334,64 @@ int main(int argc, char **argv) {
            rcl, g_it_div, g_it_int, g_so ? 1 : 0, g_win_up, g_win_down, g_so_f1, g_so_f2, g_beta_min, g_beta_max, g_beta0_scale, g_ils, select.c_str(), order.c_str(), pool_names.c_str());
     if (g_gran > 0) printf("gran %d\n", g_gran);
     if (g_atmost) printf("atmost 1\n");
+    if (DP.on) {
+        printf("dpm rank_K=%d eps=%.3f prune=%d memory=%d sets=%zu build_cpu_s=%.4f draws=%ld top_draws=%ld uniform_draws=%ld pruned=%ld mem_skips=%ld fallback=%ld resets=%ld\n",
+               g_dpm_K, g_dpm_eps, g_dpm_prune ? 1 : 0, g_dpm_mem ? 1 : 0, DP.sets.size(), DP.build_s, DP.draws, DP.top_draws, DP.uni_draws, DP.pruned, DP.mem_skips, DP.fallback, DP.resets);
+        if (!out_prefix.empty()) {                                   // sidecar for the run script (only when a --dpm-* flag is on)
+            FILE *g = fopen((out_prefix + ".dpm.csv").c_str(), "w");
+            if (g) {
+                fprintf(g, "Instance,Seed,rank_K,eps,prune,memory,sets,build_cpu_s,draws,top_draws,uniform_draws,pruned,mem_skips,fallback,resets\n");
+                fprintf(g, "%s,%lld,%d,%.3f,%d,%d,%zu,%.4f,%ld,%ld,%ld,%ld,%ld,%ld,%ld\n", I.name.c_str(), seed, g_dpm_K, g_dpm_eps, g_dpm_prune ? 1 : 0, g_dpm_mem ? 1 : 0, DP.sets.size(), DP.build_s,
+                        DP.draws, DP.top_draws, DP.uni_draws, DP.pruned, DP.mem_skips, DP.fallback, DP.resets);
+                fclose(g);
+            }
+        }
+    }
+    if (g_dpm_tabu) {
+        printf("tabu on=1 cycles=%ld adds=%ld skipped_int=%ld draw_skips=%ld resets=%ld size_end=%ld draw=%d skip=%d\n", TB.cycles, TB.adds, TB.skipped_int, TB.draw_skips, TB.resets, TB.count, g_tabu_draw ? 1 : 0, g_tabu_skip ? 1 : 0);
+        if (!out_prefix.empty()) {
+            FILE *g = fopen((out_prefix + ".tabu.csv").c_str(), "w");
+            if (g) { fprintf(g, "Instance,Seed,iter,event\n"); for (auto &e : TB.events) fprintf(g, "%s,%lld,%d,%s\n", I.name.c_str(), seed, e.first, e.second.c_str()); fclose(g); }
+        }
+    }
+    if (g_pr_elite > 0) {
+        printf("pr on=1 elite=%d calls=%ld nodiff=%ld skipped_time=%ld points=%ld feasible_points=%ld improved_best=%ld elite_adds=%ld\n", g_pr_elite, PRS.calls, PRS.nodiff, PRS.skipped_time,
+               PRS.points, PRS.feasible_points, PRS.improved_best, PRS.elite_adds);
+        if (!out_prefix.empty()) {
+            FILE *g = fopen((out_prefix + ".pr.csv").c_str(), "w");
+            if (g) {
+                fprintf(g, "Instance,Seed,iter,dir,ndiff,nmoved,cost_half,cost_end,best_before,best_after,cpu_s\n");
+                for (auto &l : g_pr_log) fprintf(g, "%s,%lld,%d,%d,%d,%d,%.9g,%.9g,%.9g,%.9g,%.4f\n", I.name.c_str(), seed, l.iter, l.dir, l.ndiff, l.nmoved, l.c1, l.c2, l.before, l.after, l.cpu);
+                fclose(g);
+            }
+        }
+    }
+    if (g_eax_split > 0.0) {
+        printf("eax on=1 split=%.3f pop=%d psi=%.2f esc=%d ils=%d pool_theta=%.3f start_cpu_s=%.3f best_at_start=%.9g pop_at_end=%zu gens=%ld attempts=%ld fail_struct=%ld fail_streak_stop=%ld dup=%ld rejected=%ld invalid=%ld inserted=%ld improved_best=%ld pool_adds=%ld cycles=%ld subtours=%ld nodiff=%ld ls_cpu_s=%.3f\n",
+               g_eax_split, g_eax_pop, g_eax_psi, g_eax_esc, g_eax_ils, g_eax_pool_theta, EXS.start_cpu, EXS.best_at_start, POP.size(), EXS.gens, EXS.attempts, EXS.fail_struct, EXS.fail_streak_stop, EXS.dup, EXS.rejected,
+               EXS.invalid, EXS.inserted, EXS.improved_best, EXS.pool_adds, EXS.cycles, EXS.subtours, EXS.cross_nodiff, EXS.ls_cpu);
+        if (!out_prefix.empty()) {
+            FILE *g = fopen((out_prefix + ".eax.csv").c_str(), "w");
+            if (g) {
+                fprintf(g, "Instance,Seed,gen,cpu_s,child_cost,parent_a,parent_b,parent_c,best,ndiff1,ndiff2,subtours,inserted\n");
+                for (auto &w : g_eax_rows) fprintf(g, "%s,%lld,%ld,%.4f,%.9g,%.9g,%.9g,%.9g,%.9g,%d,%d,%d,%d\n", I.name.c_str(), seed, w.gen, w.cpu, w.cost, w.pa, w.pb, w.pc, w.best, w.nd1, w.nd2, w.nsub, w.inserted);
+                fclose(g);
+            }
+        }
+    }
+    if (g_pool_on) {
+        double sp_cpu = 0; int nimp = 0; for (auto &l : RI.pool_logs) { sp_cpu += l.sp_cpu; nimp += l.improved; }
+        printf("pool on=1 src=%d tl=%.2f sets=%d first=%d calls=%zu improved_calls=%d sp_cpu_s=%.3f routes=%zu new=%ld hit=%ld dp_calls=%ld dp_gain=%ld dp_skipped=%ld\n", g_pool_src, g_pool_tl, g_pool_sets, g_pool_first,
+               RI.pool_logs.size(), nimp, sp_cpu, PL->R.size(), PL->n_new, PL->n_hit, PL->dp_calls, PL->dp_gain, PL->dp_skipped);
+        if (!out_prefix.empty()) {
+            FILE *g = fopen((out_prefix + ".pool.csv").c_str(), "w");
+            if (g) {
+                fprintf(g, "Instance,Seed,call,iter,cpu_s,sp_cpu_s,best_before,best_after,root_lb,pool_routes,nodes,sets_tried,improved,complete\n");
+                for (auto &l : RI.pool_logs) fprintf(g, "%s,%lld,%d,%d,%.4f,%.4f,%.9g,%.9g,%.9g,%ld,%ld,%d,%d,%d\n", I.name.c_str(), seed, l.call, l.iter, l.cpu, l.sp_cpu, l.before, l.after, l.lb, l.routes, l.nodes, l.sets, l.improved, l.complete);
+                fclose(g);
+            }
+        }
+    }
     if (!out_prefix.empty()) write_outputs(out_prefix, I, best, feas, RI, algo, seed, cpu, wall);
     if (!quiet) {
         for (auto &r : best.routes) {

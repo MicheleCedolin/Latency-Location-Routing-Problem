@@ -10,11 +10,11 @@ The problem definition is given in Section 3 of the manuscript.
 
 ## Repository layout
 
-Everything in this repository is used by the manuscript; there is no unrelated code.
+Everything in this repository is used by the manuscript. The one exception is a handful of solver flags of mechanisms that were tried and not adopted (see [`cpp/README.md`](cpp/README.md#engine-stages-and-provenance)); they are off by default and no result of the paper uses them.
 
 | Folder | Content |
 |---|---|
-| [`cpp/`](cpp) | **Solver and run scripts.** `llrp_fast` (GRASP + RVND, 14 operators, strategic oscillation, depot swap) and `llrp_tools` (experiment orchestration, independent verification, statistics). C++11 only. Includes the 76 instances in `inst/`, the tuned configuration `irace/best.flags`, the irace scenario and all run scripts. → [`cpp/README.md`](cpp/README.md) |
+| [`cpp/`](cpp) | **Solver and run scripts.** `llrp_fast` (GRASP + RVND, 14 operators, strategic oscillation, depot swap; depot-aware diversification, route pool and memetic phase as flags) and `llrp_tools` (experiment orchestration, independent verification, statistics). C++11 only. Includes the 76 instances in `inst/`, the tuned configuration `irace/best.flags`, the irace scenario and all run scripts. → [`cpp/README.md`](cpp/README.md) |
 | [`study_results/`](study_results) | Raw result files of the runs reported in the manuscript (one archive per campaign; the table below says which). → [`study_results/README.md`](study_results/README.md) |
 | [`paper/`](paper) | Regenerates the result tables, quoted numbers and figures of the base-method campaigns from `study_results` (`paper/run_all.sh`, ~15 s); the tables are pinned by checksums. → [`paper/README.md`](paper/README.md) |
 | [`analysis/`](analysis) | Analyses of the result archives: `ext10_report.py` (tuning budget versus extended budget, comparison with RLHEA), `depot_decomp.py` (where the base method loses: depot set, assignment, route partition, order), `anytime_at_tavg.py` (equal-time comparison with RLHEA). → [`analysis/README.md`](analysis/README.md) |
@@ -76,13 +76,20 @@ Every campaign writes `run.csv`, `routes.csv`, `trace.csv` and `env.txt` (flags,
 | 2a | Base method, tuning budget | `cpp/irace/best.flags` | 76 x 30, 0.3 n s | `cpp/run_final.sh` | `final_1x_tuned.tar.gz` |
 | 2b | Base method, extended budget | same | 58 x 30, 3 n s | `INSTLIST=ext10_instances.txt TC=300 TAG=ext10 OUT=results_extended10 cpp/run_extended.sh` | `ext10_tuned.tar.gz` |
 | 2c | Prins `50-5-2BIS-5` | `+ --atmost` (`cpp/irace/atmost.flags`) | 1 x 30, 0.3 n s | `FAMILY=custom FLAGS_FILE=irace/atmost.flags TAG=atmost cpp/run_final.sh 50-5-2BIS-5` | `atmost_50-5-2BIS-5.tar.gz` |
-| 3 | + depot-aware diversification | `--dpm-rank 10,0.25 --dpm-prune` | 57 x 30, 3 n s | *to be added* | *to be added* |
-| 4 | + route pool (**final method**) | `--pool-sp --pool-tl 3 --pool-sets 3 --pool-first 8 --pool-src 1` | 57 x 30, 3 n s including the set-partitioning time | *to be added* | `b1_tuned.tar.gz` (produced with `llrp_fast` v7) |
-| 5 | Exploratory memetic phase (Supporting Information S7) | `--eax-split 0.4 --eax-pop 20 --eax-psi 0.55 --eax-esc 12 --eax-ils 0 --eax-pool-theta 0.01` | 57 x 30, 3 n s | *to be added* | *to be added* |
+| 3 | + depot-aware diversification | `--dpm-rank 10,0.25 --dpm-prune` | 57 x 30, 3 n s | `FLAGS_FILE=stages/2_depot.flags INSTLIST=stages/instances_n100.txt TC=300 TAG=depot OUT=results_depot cpp/run_extended.sh` | *to be added* |
+| 4 | + route pool (**final method**) | `--pool-sp --pool-tl 3 --pool-sets 3 --pool-first 8 --pool-src 1` | 57 x 30, 3 n s including the set-partitioning time | same with `stages/3_pool.flags`, `TAG=pool` | `b1_tuned.tar.gz` (produced with `llrp_fast` v7; replayed with the current engine) |
+| 5 | Exploratory memetic phase (Supporting Information S7) | `--eax-split 0.4 --eax-pop 20 --eax-psi 0.55 --eax-esc 12 --eax-ils 0 --eax-pool-theta 0.01` | 57 x 30, 3 n s | same with `stages/4_memetic.flags`, `TAG=memetic` | *to be added* |
 
-**Status of this repository (to be updated with the next commit).** Stages 0 to 2 are complete: every run of the archives can be replayed exactly from its iteration count (`replay_check_*.txt` in the archives) and `paper/run_all.sh` regenerates their tables.
-The source of stages 3 to 5 (`llrp_fast` v9, which contains all stages as flags), the flag files of the four configurations
-and the archives of stages 3 and 5 are not yet in the repository; the archive of stage 4 is, but its solver version is not.
+The four flag files in [`cpp/stages/`](cpp/stages) are cumulative (each extends the previous one; `2_depot.flags` = `1_base.flags` + depot-aware diversification, and so on), and `stages/instances_n100.txt` lists the 57 instances of stages 3 to 5.
+Run the commands from `cpp/` after `./build.sh`; `cpp/run_extended.sh` writes `run.csv`, `routes.csv`, `trace.csv`, `env.txt` and verifies every run.
+
+**Link between archives and source.** A run limited by CPU time is reproduced exactly by running the same seed and flags for the number of GRASP iterations it completed (the column `Iterations` of `run.csv`).
+`python3 analysis/replay_archive.py ARCHIVE --flags FLAGS --n-runs N` does this for the cheapest runs of an archive and compares the objective value; CI runs it on the archives of stages 2 and 4.
+With the current engine (`cpp/src/llrp_fast.cpp`, the v9 source that produced the memetic campaigns), the replayed values agree to the last printed digit with the archives of the base method
+(built with an earlier version), of the `--atmost` check and of the route-pool campaign (built with v7).
+
+**Status (to be updated with the next commit).** Stages 0 to 2 and the source of all stages are complete. The archives of stage 3 (depot-aware diversification) and stage 5 (memetic phase) and the analysis scripts of the
+pre-registered criteria of stage 5 are not yet in the repository.
 
 ## Running experiments on GitHub Actions
 

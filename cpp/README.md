@@ -27,7 +27,7 @@ The code compiles cleanly with `-std=c++11 -pedantic-errors` and with clang; it 
 
 | Path | Content |
 |---|---|
-| `src/llrp_fast.cpp` | Solver (v5): GRASP + RVND, 14 operators, strategic oscillation (SO), depot swap `ds`, stopping rules, per-operator CPU / benefit counters; optional `--atmost` (at most `Ng` open depots) and `--gran D` (granular neighbourhoods, experimental) |
+| `src/llrp_fast.cpp`, `src/poolsp.hpp` | Solver (v9; see "Engine stages and provenance"): GRASP + RVND, 14 operators, strategic oscillation (SO), depot swap `ds`, stopping rules, per-operator CPU / benefit counters; optional `--atmost` (at most `Ng` open depots) and `--gran D` (granular neighbourhoods, experimental) |
 | `src/llrp_tools.cpp` (+ `cmd_*.hpp`, `tools_*.hpp`) | Tools: `manifest select merge check-csv summarize compare ablation calibrate verify workbook irace-gen irace-flags irace-sample selftest wilcoxon` (`bin/llrp_tools` prints the usage) |
 | `inst/{barreto,tuzun,prins}/*.inst` | The 76 instances in one text format (see below) |
 | `manifest.tsv` | Per instance: n, m, Q, Nv, Ng, BKS, total demand, tightness, size class, flag |
@@ -42,6 +42,20 @@ The code compiles cleanly with `-std=c++11 -pedantic-errors` and with clang; it 
 | `irace_dryrun.sh` | Exercises the target-runner chain without irace |
 | `*.sge`, `setup_irace_env.sh` | Job scripts for an SGE cluster and a root-less R + irace installation (micromamba) |
 | `data/` | `timing_probe_20it.tsv` (CPU time of 20 iterations on every instance), `inst_validation_published_solutions.txt` |
+
+## Engine stages and provenance
+
+`src/llrp_fast.cpp` + `src/poolsp.hpp` is the engine that produced the campaigns of the memetic phase (v9). It contains every stage of the method as flags that are **off by default**:
+without any stage flag it is the base method (replayed runs agree with the archives of the base method and of the `--atmost` check, which were built with earlier versions).
+
+| Flags | Stage | Description |
+|---|---|---|
+| `irace/best.flags` (= `stages/1_base.flags`) | base method | GRASP + RVND with strategic oscillation, ILS, depot swap; configuration 267 of the irace run |
+| `--dpm-rank K[,eps] --dpm-prune` | depot-aware diversification | start depot sets drawn among the `K` sets with the lowest p-median bound with probability `1 - eps`; sets whose bound is not below the incumbent are discarded |
+| `--pool-sp --pool-tl S --pool-sets M --pool-first N --pool-src 1` | route pool | routes of every GRASP iteration are pooled, re-ordered by an exact dynamic program (up to 16 customers) and recombined by set partitioning at iterations N, 2N, 4N, ... and at the end; the time of the set-partitioning calls is part of the CPU limit |
+| `--eax-split F --eax-pop P --eax-psi W --eax-esc E --eax-ils I --eax-pool-theta T` | memetic phase (exploratory) | the last `1 - F` of the budget recombines the solutions of the first part by edge-assembly crossover |
+
+Flags of mechanisms that were tried and **not adopted** are still in the source, off by default, and used by no result of the paper: `--dpm-memory`, `--dpm-cap`, `--dpm-tabu`, `--dpm-tabu-parts`, `--pr-elite`, `--gran`.
 
 ### Instance format (`*.inst`)
 
