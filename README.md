@@ -76,7 +76,7 @@ Every campaign writes `run.csv`, `routes.csv`, `trace.csv` and `env.txt` (flags,
 | 2a | Base method, tuning budget | `cpp/irace/best.flags` | 76 x 30, 0.3 n s | `cpp/run_final.sh` | `final_1x_tuned.tar.gz` |
 | 2b | Base method, extended budget | same | 58 x 30, 3 n s | `INSTLIST=ext10_instances.txt TC=300 TAG=ext10 OUT=results_extended10 cpp/run_extended.sh` | `ext10_tuned.tar.gz` |
 | 2c | Prins `50-5-2BIS-5` | `+ --atmost` (`cpp/irace/atmost.flags`) | 1 x 30, 0.3 n s | `FAMILY=custom FLAGS_FILE=irace/atmost.flags TAG=atmost cpp/run_final.sh 50-5-2BIS-5` | `atmost_50-5-2BIS-5.tar.gz` |
-| 3 | + depot-aware diversification | `--dpm-rank 10,0.25 --dpm-prune` | 57 x 30, 3 n s | `FLAGS_FILE=stages/2_depot.flags INSTLIST=stages/instances_n100.txt TC=300 TAG=depot OUT=results_depot cpp/run_extended.sh` | *to be added* |
+| 3 | + depot-aware diversification | `--dpm-rank 10,0.25 --dpm-prune` | 57 x 30, 3 n s | `FLAGS_FILE=stages/2_depot.flags INSTLIST=stages/instances_n100.txt TC=300 TAG=depot OUT=results_depot cpp/run_extended.sh` | `depot_tuned.tar.gz` (produced with `llrp_fast` v6, `Algorithm` column `V1`; replayed with the current engine) |
 | 4 | + route pool (**final method**) | `--pool-sp --pool-tl 3 --pool-sets 3 --pool-first 8 --pool-src 1` | 57 x 30, 3 n s including the set-partitioning time | same with `stages/3_pool.flags`, `TAG=pool` | `b1_tuned.tar.gz` (produced with `llrp_fast` v7; replayed with the current engine) |
 | 5 | Exploratory memetic phase (Supporting Information S7) | `--eax-split 0.4 --eax-pop 20 --eax-psi 0.55 --eax-esc 12 --eax-ils 0 --eax-pool-theta 0.01` | 57 x 30, 3 n s | same with `stages/4_memetic.flags`, `TAG=memetic` | `memetic_tuned.tar.gz` (produced with `llrp_fast` v9, the source of this repository; analysis: [`analysis/memetic`](analysis/memetic)) |
 
@@ -84,11 +84,11 @@ The four flag files in [`cpp/stages/`](cpp/stages) are cumulative (each extends 
 Run the commands from `cpp/` after `./build.sh`; `cpp/run_extended.sh` writes `run.csv`, `routes.csv`, `trace.csv`, `env.txt` and verifies every run.
 
 **Link between archives and source.** A run limited by CPU time is reproduced exactly by running the same seed and flags for the number of GRASP iterations it completed (the column `Iterations` of `run.csv`).
-`python3 analysis/replay_archive.py ARCHIVE --flags FLAGS --n-runs N` does this for the cheapest runs of an archive and compares the objective value; CI runs it on the archives of stages 2 and 4. The memetic phase of stage 5 starts when 40 % of the CPU budget is used, so an iteration-limited replay would not enter it; the archive of stage 5 is checked by the independent verification of every run and by regenerating the pre-registered analysis from it ([`analysis/memetic`](analysis/memetic), also run by CI).
+`python3 analysis/replay_archive.py ARCHIVE --flags FLAGS --n-runs N` does this for the cheapest runs of an archive and compares the objective value; CI runs it on the archives of stages 2, 3 and 4. The memetic phase of stage 5 starts when 40 % of the CPU budget is used, so an iteration-limited replay would not enter it; the archive of stage 5 is checked by the independent verification of every run and by regenerating the pre-registered analysis from it ([`analysis/memetic`](analysis/memetic), also run by CI).
 With the current engine (`cpp/src/llrp_fast.cpp`, the v9 source that produced the memetic campaigns), the replayed values agree to the last printed digit with the archives of the base method
-(built with an earlier version), of the `--atmost` check and of the route-pool campaign (built with v7).
+(built with an earlier version), of the `--atmost` check and of the route-pool campaign (built with v7). For the depot campaign of stage 3 (built with v6) nine runs were replayed (the six cheapest, all on `P122112-10`, and one run each on `100-10-1-10`, `Or117-14` and `P111122-20`): eight agree in every printed digit, the ninth (`Or117-14`, seed 7: 53798.52560740 against 53798.52560744) in the first 12 significant digits.
 
-**Status (to be updated with the next commit).** Stages 0 to 2, 4 and 5, the source of all stages and the analysis of the pre-registered criteria of stage 5 are complete. The archive of stage 3 (depot-aware diversification) is not yet in the repository.
+**Status (26 November 2026).** The archives of all campaigns of the manuscript (stages 0 to 5), the source of all stages and the analysis of the pre-registered criteria of stage 5 are in the repository. Not yet in the repository: the scripts that produce the stage-by-stage comparison of the manuscript (stages 2 to 4, with the pre-registered criteria of stages 3 and 4).
 
 ## Running experiments on GitHub Actions
 

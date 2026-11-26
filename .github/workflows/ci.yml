@@ -96,11 +96,12 @@ jobs:
       - name: Build
         working-directory: cpp
         run: ./build.sh
-      - name: Replay the cheapest runs of the archives of stages 2 and 4
+      - name: Replay the cheapest runs of the archives of stages 2, 3 and 4
         run: |
           python3 -I analysis/replay_archive.py study_results/final_1x_tuned.tar.gz --flags cpp/stages/1_base.flags --n-runs 3 --jobs 3
           python3 -I analysis/replay_archive.py study_results/ext10_tuned.tar.gz --flags cpp/stages/1_base.flags --n-runs 3 --jobs 3
           python3 -I analysis/replay_archive.py study_results/atmost_50-5-2BIS-5.tar.gz --flags cpp/irace/atmost.flags --n-runs 2 --jobs 2
+          python3 -I analysis/replay_archive.py study_results/depot_tuned.tar.gz --flags cpp/stages/2_depot.flags --n-runs 3 --jobs 3
           python3 -I analysis/replay_archive.py study_results/b1_tuned.tar.gz --flags cpp/stages/3_pool.flags --n-runs 3 --jobs 3
 
   memetic:
