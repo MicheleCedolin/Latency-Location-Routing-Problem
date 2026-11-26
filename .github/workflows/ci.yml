@@ -124,3 +124,27 @@ jobs:
           diff "$T/out/y_summary.md" analysis/memetic/reference/y_summary.md
           diff "$T/out/y_instances.csv" analysis/memetic/reference/y_instances.csv
           grep -q "FULL-SET ADOPTION CANDIDATE" "$T/out/y_summary.md"
+
+  stages:
+    name: Stage-by-stage comparison and the pre-registered criteria of stages 3 and 4 are regenerated from the archives
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install scipy
+        run: python -m pip install scipy
+      - name: Self-test
+        run: python3 -I analysis/stages/test_analyze_stages.py
+      - name: Regenerate the analysis and compare with the reference
+        run: |
+          T="$RUNNER_TEMP/s"; mkdir -p "$T"
+          for a in ext10_tuned depot_tuned b1_tuned; do tar xzf "study_results/$a.tar.gz" -C "$T"; done
+          python3 -I analysis/stages/analyze_stages.py --base "$T/results_extended10" --depot "$T/results_depot" --pool "$T/results_b1" --manifest cpp/manifest.tsv \
+              --literature bks/literature_results.csv --instances cpp/stages/instances_n100.txt \
+              --pmedian bks/reference/pmedian_rank_of_published_depot_sets.csv --out "$T/out"
+          diff "$T/out/stages_summary.md" analysis/stages/reference/stages_summary.md
+          diff "$T/out/stages_instances.csv" analysis/stages/reference/stages_instances.csv
+          grep -q "V1 generalises to n > 75" "$T/out/stages_summary.md"
+          test "$(grep -c '| MET |' "$T/out/stages_summary.md")" -eq 5

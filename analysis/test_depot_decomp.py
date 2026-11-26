@@ -1,6 +1,9 @@
 """Self-test of depot_decomp.py (standard library only).  usage: python3 analysis/test_depot_decomp.py"""
 import csv
+import itertools
+import math
 import os
+import random
 import sys
 import tempfile
 import unittest
@@ -75,6 +78,68 @@ class Geometry(unittest.TestCase):
         self.assertIn("twice", dd.trust([(0, (0, 1)), (1, (1, 2))], 3, self.dep, self.cus, None, 1e-3))
         self.assertEqual(dd.trust(None, 3, self.dep, self.cus, 7.0, 1e-3), "no published solution")
         self.assertIsNone(dd.parse_reference(os.path.join(self.tmp.name, "missing.txt"), 3))
+
+
+class Completion(unittest.TestCase):
+    """A published solution that lacks a few customers is completed by one route (the case of Tuzun P112222-20)."""
+    dep = [(0.0, 0.0), (10.0, 0.0)]
+    cus = [(1.0, 0.0, 1.0), (2.0, 0.0, 1.0), (4.0, 0.0, 1.0)]
+
+    def test_min_latency_order_is_exact(self):
+        rnd = random.Random(7)
+        dep = [(rnd.uniform(0, 50), rnd.uniform(0, 50))]
+        cus = [(rnd.uniform(0, 50), rnd.uniform(0, 50), 1.0) for _ in range(6)]
+        lat, order = dd.min_latency_order(0, list(range(6)), dep, cus)
+        brute = min(dd.latency([(0, p)], dep, cus) for p in itertools.permutations(range(6)))
+        self.assertAlmostEqual(lat, brute)
+        self.assertAlmostEqual(dd.latency([(0, order)], dep, cus), lat)
+        self.assertEqual(sorted(order), list(range(6)))
+
+    def test_complete_one_route(self):
+        done, note = dd.complete_missing([(0, (0, 1))], 3, self.dep, self.cus, 10.0, 2, 7.0)
+        self.assertEqual(done, [(0, (0, 1)), (0, (2,))])
+        self.assertIn("1 missing customers", note)
+        self.assertIsNone(dd.trust(done, 3, self.dep, self.cus, 7.0, 1e-3))
+
+    def test_refusals(self):
+        r = [(0, (0, 1))]
+        self.assertIn("exceed Nv", dd.complete_missing(r, 3, self.dep, self.cus, 10.0, 1, 7.0)[1])                  # no room for one more route
+        self.assertIn("fit one vehicle", dd.complete_missing(r, 3, self.dep, self.cus, 0.5, 2, 7.0)[1])             # capacity
+        self.assertIn("does not reproduce", dd.complete_missing(r, 3, self.dep, self.cus, 10.0, 2, 7.5)[1])         # published value not matched
+        self.assertIn("no published best", dd.complete_missing(r, 3, self.dep, self.cus, 10.0, 2, None)[1])
+        self.assertIn("at most", dd.complete_missing([(0, (0,))], 20, self.dep, self.cus * 7, 10.0, 5, 7.0)[1])      # too many missing
+        self.assertIn("twice", dd.complete_missing([(0, (0, 1)), (1, (1,))], 3, self.dep, self.cus, 10.0, 3, 7.0)[1])
+
+    def test_ambiguous_depot_is_refused(self):
+        dep = [(0.0, 0.0), (0.0, 0.0)]                                                     # two identical depots reproduce the value equally well
+        done, note = dd.complete_missing([(0, (0, 1)), (1, (2,))], 4, dep, self.cus + [(8.0, 0.0, 1.0)], 10.0, 5, 3.0 + 4.0 + 8.0)
+        self.assertIsNone(done)
+        self.assertIn("exactly one open depot", note)
+
+    def test_main_completes_unless_switched_off(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "inst", "prins"))
+            with open(os.path.join(d, "inst", "prins", "T1-2.inst"), "w") as fh:
+                fh.write(INST)
+            with open(os.path.join(d, "lit.csv"), "w") as fh:
+                fh.write("instance,family,n,m,Nv,algorithm,best,avg,time_s\nT1-2,prins,3,2,2,RLHEA,7.00,7.00,1.0\n")
+            os.makedirs(os.path.join(d, "ref"))
+            with open(os.path.join(d, "ref", "T1.txt"), "w") as fh:
+                fh.write("4 1 2\n")                                                        # customer 3 is missing
+            os.makedirs(os.path.join(d, "res"))
+            with open(os.path.join(d, "res", "run.csv"), "w", newline="") as fh:
+                w = csv.writer(fh)
+                w.writerow(["Instance", "Seed", "Feasible", "Total Latency", "Gap to BKS (%)"])
+                w.writerow(["T1-2", 1, "True", 7.0, 0.0])
+            with open(os.path.join(d, "res", "routes.csv"), "w", newline="") as fh:
+                w = csv.writer(fh)
+                w.writerow(["Instance", "Seed", "Depot", "Customers"])
+                w.writerow(["T1-2", 1, 0, "0 -> 1"])
+                w.writerow(["T1-2", 1, 0, "2"])
+            args = [os.path.join(d, "res"), "--ref-solutions", os.path.join(d, "ref"), "--inst-dir", os.path.join(d, "inst"), "--literature", os.path.join(d, "lit.csv"),
+                    "--out", os.path.join(d, "out.csv")]
+            self.assertEqual([r[5] for r in dd.main(args)], ["E"])
+            self.assertEqual(dd.main(args + ["--no-complete"]), [])
 
 
 class Classes(unittest.TestCase):
