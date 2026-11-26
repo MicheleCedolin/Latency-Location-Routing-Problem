@@ -378,7 +378,7 @@ def main(argv=None):
     with open(os.path.join(a.out, "stages_summary.md"), "w", encoding="utf-8") as fh:
         fh.write("\n".join(L) + "\n")
     with open(os.path.join(a.out, "stages_instances.csv"), "w", newline="", encoding="utf-8") as fh:
-        w = csv.writer(fh)
+        w = csv.writer(fh, lineterminator="\n")                # LF on every platform, so that the output is byte-identical to the reference
         w.writerow(["instance", "family", "n", "bks", "zou_avg", "zou_best"] + ["gap_" + arm for arm in ARMS] + ["bestgap_" + arm for arm in ARMS] + ["hit_" + arm for arm in ARMS])
         for nm in names:
             w.writerow([nm, man[nm]["family"], size[nm], "%.2f" % man[nm]["bks"], lit[nm]["avg"] if nm in lit else "", lit[nm]["best"] if nm in lit else ""]
