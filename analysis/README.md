@@ -11,6 +11,7 @@ Scripts that turn the raw result archives of [`../study_results`](../study_resul
 | [`test_report.py`](test_report.py) | Self-test of the rank test and of the iteration bookkeeping (`python3 analysis/test_report.py`) |
 | [`depot_decomp.py`](depot_decomp.py) | Hierarchical decomposition of the difference between our final solutions and a reference solution: depot set (A), customer-to-depot assignment (B), route partition (C), visiting order (D), identical (E) |
 | [`test_depot_decomp.py`](test_depot_decomp.py) | Self-test of the decomposition (`python3 analysis/test_depot_decomp.py`) |
+| [`memetic/`](memetic) | Pre-registered plans and analysis of the exploratory memetic phase (Supporting Information S7); regenerates the criteria P1, P2, P3 and S from `study_results/memetic_tuned.tar.gz` (needs scipy) |
 
 ## Reproduce
 

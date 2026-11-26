@@ -78,18 +78,17 @@ Every campaign writes `run.csv`, `routes.csv`, `trace.csv` and `env.txt` (flags,
 | 2c | Prins `50-5-2BIS-5` | `+ --atmost` (`cpp/irace/atmost.flags`) | 1 x 30, 0.3 n s | `FAMILY=custom FLAGS_FILE=irace/atmost.flags TAG=atmost cpp/run_final.sh 50-5-2BIS-5` | `atmost_50-5-2BIS-5.tar.gz` |
 | 3 | + depot-aware diversification | `--dpm-rank 10,0.25 --dpm-prune` | 57 x 30, 3 n s | `FLAGS_FILE=stages/2_depot.flags INSTLIST=stages/instances_n100.txt TC=300 TAG=depot OUT=results_depot cpp/run_extended.sh` | *to be added* |
 | 4 | + route pool (**final method**) | `--pool-sp --pool-tl 3 --pool-sets 3 --pool-first 8 --pool-src 1` | 57 x 30, 3 n s including the set-partitioning time | same with `stages/3_pool.flags`, `TAG=pool` | `b1_tuned.tar.gz` (produced with `llrp_fast` v7; replayed with the current engine) |
-| 5 | Exploratory memetic phase (Supporting Information S7) | `--eax-split 0.4 --eax-pop 20 --eax-psi 0.55 --eax-esc 12 --eax-ils 0 --eax-pool-theta 0.01` | 57 x 30, 3 n s | same with `stages/4_memetic.flags`, `TAG=memetic` | *to be added* |
+| 5 | Exploratory memetic phase (Supporting Information S7) | `--eax-split 0.4 --eax-pop 20 --eax-psi 0.55 --eax-esc 12 --eax-ils 0 --eax-pool-theta 0.01` | 57 x 30, 3 n s | same with `stages/4_memetic.flags`, `TAG=memetic` | `memetic_tuned.tar.gz` (produced with `llrp_fast` v9, the source of this repository; analysis: [`analysis/memetic`](analysis/memetic)) |
 
 The four flag files in [`cpp/stages/`](cpp/stages) are cumulative (each extends the previous one; `2_depot.flags` = `1_base.flags` + depot-aware diversification, and so on), and `stages/instances_n100.txt` lists the 57 instances of stages 3 to 5.
 Run the commands from `cpp/` after `./build.sh`; `cpp/run_extended.sh` writes `run.csv`, `routes.csv`, `trace.csv`, `env.txt` and verifies every run.
 
 **Link between archives and source.** A run limited by CPU time is reproduced exactly by running the same seed and flags for the number of GRASP iterations it completed (the column `Iterations` of `run.csv`).
-`python3 analysis/replay_archive.py ARCHIVE --flags FLAGS --n-runs N` does this for the cheapest runs of an archive and compares the objective value; CI runs it on the archives of stages 2 and 4.
+`python3 analysis/replay_archive.py ARCHIVE --flags FLAGS --n-runs N` does this for the cheapest runs of an archive and compares the objective value; CI runs it on the archives of stages 2 and 4. The memetic phase of stage 5 starts when 40 % of the CPU budget is used, so an iteration-limited replay would not enter it; the archive of stage 5 is checked by the independent verification of every run and by regenerating the pre-registered analysis from it ([`analysis/memetic`](analysis/memetic), also run by CI).
 With the current engine (`cpp/src/llrp_fast.cpp`, the v9 source that produced the memetic campaigns), the replayed values agree to the last printed digit with the archives of the base method
 (built with an earlier version), of the `--atmost` check and of the route-pool campaign (built with v7).
 
-**Status (to be updated with the next commit).** Stages 0 to 2 and the source of all stages are complete. The archives of stage 3 (depot-aware diversification) and stage 5 (memetic phase) and the analysis scripts of the
-pre-registered criteria of stage 5 are not yet in the repository.
+**Status (to be updated with the next commit).** Stages 0 to 2, 4 and 5, the source of all stages and the analysis of the pre-registered criteria of stage 5 are complete. The archive of stage 3 (depot-aware diversification) is not yet in the repository.
 
 ## Running experiments on GitHub Actions
 
