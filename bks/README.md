@@ -44,6 +44,7 @@ Best value, average value and running time of seven published algorithms on the 
 | `time_s` | Running time in seconds as reported (mean over the runs; for RLHEA the stopping time) |
 
 570 rows = 76 instances × 7 algorithms + `GBILS` on 38 instances (Barreto and Prins; no values for two Barreto instances, none for Tüzün–Burke).
+**GBILS caveat:** the three Christofides69 rows (`Ch50-5` 1719.89, `Ch75-10` 2399.28, `Ch100-10` 3984.05) are the values published for another variant of the instance (BKS here 1661.64 / 2362.48 / 3788.96); they are kept as published but are excluded from the comparison scripts (`analysis/final`, `compare_published.py`).
 
 * **Source and transcription.** The values were transcribed from the supplementary tables SM-5, SM-6 and SM-7 (deterministic LLRP) of Osorio-Mora et al. (2025). Checks: n / m / Nv agree with `LLRP_BKS.csv`, and the best-known value of the supplement equals the smallest `best` of every instance (re-run by `check_literature.py`); at transcription the column means were also compared with the printed "Global avg." rows.
   One inconsistency lies inside the source: the Prins-set `MA` average column (the 30 rows average 1658.85, the printed global average is 1610.33; the other columns reconcile). Instance names follow `LLRP_BKS.csv`; the supplement's `Gaskell-32-5b` is `Gaskell32-5`, `Christ-*` is `Ch*`, `Min-*` is `Mi*`.

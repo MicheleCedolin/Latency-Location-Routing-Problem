@@ -27,6 +27,8 @@ from collections import defaultdict
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOL = 0.005
 ALGOS = ['MA', 'GBILS', 'SA-VND0', 'SA-VND1', 'SA-VND2', 'M-ILS', 'RLHEA', 'MS-VNS']
+# GBILS values of Christofides69 50x5 / 75x10 / 100x10 belong to another variant of the instance (see README.md): left out of the comparison
+GBILS_UNMATCHED = {('Ch50-5', 'GBILS'), ('Ch75-10', 'GBILS'), ('Ch100-10', 'GBILS')}
 
 
 def gap(x, bks):
@@ -64,6 +66,8 @@ def main():
     reg = {r['instance']: r for r in csv.DictReader(open(os.path.join(HERE, 'LLRP_BKS.csv'), newline=''))}
     lit = defaultdict(dict)
     for r in csv.DictReader(open(os.path.join(HERE, 'literature_results.csv'), newline='')):
+        if (r['instance'], r['algorithm']) in GBILS_UNMATCHED:
+            continue
         lit[r['instance']][r['algorithm']] = r
     ours = load_ours(a.summary)
     unknown = sorted(set(ours) - set(reg))
