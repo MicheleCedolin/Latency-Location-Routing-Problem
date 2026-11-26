@@ -147,4 +147,5 @@ jobs:
           diff "$T/out/stages_summary.md" analysis/stages/reference/stages_summary.md
           diff "$T/out/stages_instances.csv" analysis/stages/reference/stages_instances.csv
           grep -q "V1 generalises to n > 75" "$T/out/stages_summary.md"
-          test "$(grep -c '| MET |' "$T/out/stages_summary.md")" -eq 5
+          test "$(grep -c '| MET |' "$T/out/stages_summary.md")" -eq 4           # G0 and G1 of stage 3, G1 and G0 of stage 4
+          test "$(grep -c '| NOT MET |' "$T/out/stages_summary.md")" -eq 1       # G2 of stage 3 (9 of 57, threshold 10)
