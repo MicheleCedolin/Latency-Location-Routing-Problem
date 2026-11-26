@@ -6,3 +6,4 @@ python/data/** -text
 python/reference/*.csv -text
 cpp/data/** -text
 *.sh text eol=lf
+analysis/memetic/reference/*.csv -text
