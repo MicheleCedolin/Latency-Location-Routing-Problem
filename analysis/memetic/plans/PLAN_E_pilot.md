@@ -1,8 +1,8 @@
 # B1-E pilot: B1 + memetic MPEAX phase (pre-registered plan)
 
-> English translation of the Turkish original, which was first committed in `43fa2e5` and remains in the git history. Content, numbers, criteria and identifiers are unchanged.
+> English translation of the Turkish original, which is no longer part of the repository. Content, numbers, criteria and identifiers are unchanged.
 
-This document was written **before the pilot result was seen** (`pilot/EAX_PLAN.md`, branch `pilot/v8`). During development only P122112-10 (1 seed, 90 s) and P121212-10 (6 seeds, 150 s; NOT used in the pilot) were run; the pilot instances, seeds and parameters were not changed after these runs.
+This document was written **before the pilot result was seen** (file `pilot/EAX_PLAN.md` of the original). During development only P122112-10 (1 seed, 90 s) and P121212-10 (6 seeds, 150 s; NOT used in the pilot) were run; the pilot instances, seeds and parameters were not changed after these runs.
 
 ## Question
 Does adding to B1 a phase resembling the structure of Zou et al. (2024, RLHEA) -- population + 3-parent edge assembly crossover (MPEAX) + distance/quality population management -- lower the mean gap of B1, especially on the tight-capacity n=200 instances where the B1-Zou gap is large? (Diagnosis: 66% of the gaps are different customer assignments within the same depot set; the route-pool SP of B1 only recombines whole routes, whereas MPEAX recombines at the level of edges inside routes.)

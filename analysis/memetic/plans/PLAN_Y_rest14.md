@@ -1,6 +1,6 @@
 # B1-E: running the skipped 14 instances (pre-registered plan)
 
-> English translation of the Turkish original, which was first committed in `43fa2e5` and remains in the git history. Content, numbers, criteria and identifiers are unchanged.
+> English translation of the Turkish original, which is no longer part of the repository. Content, numbers, criteria and identifiers are unchanged.
 
 This document was written **before the results of these 14 instances were seen**. Previous stages: pilot (PLAN_E.md) and extension (PLAN_X.md) -- P1, P2, S passed (43 instances; at n=200 mean gap 0.254 -> 0.197, on the 25 evaluated n<200 instances 0.072 -> 0.045). The arm, engine and parameters were NOT changed (`B1_eax40`, `llrp_fast_v9`, binary sha256 0356d2b4...).
 

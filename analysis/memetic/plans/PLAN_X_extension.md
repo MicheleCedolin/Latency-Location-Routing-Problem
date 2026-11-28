@@ -1,6 +1,6 @@
 # B1-E extension (pre-registered plan; the pilot passed)
 
-> English translation of the Turkish original, which was first committed in `43fa2e5` and remains in the git history. Content, numbers, criteria and identifiers are unchanged.
+> English translation of the Turkish original, which is no longer part of the repository. Content, numbers, criteria and identifiers are unchanged.
 
 This document was written **before the extension result was seen** (`pilot/EAX_PLAN_X.md`). Pilot (PLAN_E.md): 4 instances, n=200 x 30 seeds -- P1, P2, S passed (P122112-10 -0.223, P122212-10 -0.094, 200-10-1-10 -0.069, P121122-20 -0.008 points; 120/120 valid). The arm, engine and parameters were NOT changed after the pilot (`B1_eax40`, `llrp_fast_v9`, binary sha256 0356d2b4...).
 

@@ -2,7 +2,7 @@
 
 The exploratory memetic phase (a population of the feasible GRASP solutions, three-parent edge assembly crossover, `--eax-split 0.4`) was evaluated in three steps.
 For every step the plan (question, method, parameters, criteria and known caveats) was written before the results of that step were seen and is kept here unchanged in content.
-The plans were first committed to this repository after the runs (commit `43fa2e5` on branch `pilot/v8`, in the original wording); the English versions in [`plans/`](plans) are translations of those files.
+The plans were first committed to this repository after the runs; the English versions in [`plans/`](plans) are translations of the original Turkish files, which are no longer part of the repository.
 
 | Step | Plan | Instances x seeds | Criteria |
 |---|---|---|---|
