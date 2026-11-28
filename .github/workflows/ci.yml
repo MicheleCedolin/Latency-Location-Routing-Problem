@@ -105,6 +105,17 @@ jobs:
           python3 -I analysis/replay_archive.py study_results/depot_tuned.tar.gz --flags cpp/stages/2_depot.flags --n-runs 3 --jobs 3
           python3 -I analysis/replay_archive.py study_results/b1_tuned.tar.gz --flags cpp/stages/3_pool.flags --n-runs 3 --jobs 3
 
+  verify:
+    name: Independent verification of all archived runs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        working-directory: cpp
+        run: ./build.sh
+      - name: Verify every run of every archive (routes re-evaluated against the instance, objective compared)
+        run: python3 -I analysis/verify_archives.py study_results/*.tar.gz
+
   memetic:
     name: Memetic-phase analysis is regenerated from the archives
     runs-on: ubuntu-latest

@@ -24,6 +24,7 @@ CORE = ['MA', 'SA-VND0', 'SA-VND1', 'SA-VND2', 'M-ILS', 'RLHEA', 'MS-VNS']
 DOCUMENTED = {
     'Or117-14': 'registry 53798.53 (reproduced independently; the supplement prints 53798.5)',
     '20-5-1b-5': 'registry 608.05 (Zou et al. 2024; the unrounded value is 608.055), supplement 608.06',
+    'Mi27-5': 'registry 5387.55 (six algorithms and our runs, 5387.5451); GBILS (Table 6) prints 5387.54',
 }
 
 

@@ -1,6 +1,6 @@
 # B1-E pilot: B1 + memetic MPEAX phase (pre-registered plan)
 
-> English translation of the Turkish original, which was first committed in `03cf6b1` and remains in the git history. Content, numbers, criteria and identifiers are unchanged.
+> English translation of the Turkish original, which was first committed in `43fa2e5` and remains in the git history. Content, numbers, criteria and identifiers are unchanged.
 
 This document was written **before the pilot result was seen** (`pilot/EAX_PLAN.md`, branch `pilot/v8`). During development only P122112-10 (1 seed, 90 s) and P121212-10 (6 seeds, 150 s; NOT used in the pilot) were run; the pilot instances, seeds and parameters were not changed after these runs.
 

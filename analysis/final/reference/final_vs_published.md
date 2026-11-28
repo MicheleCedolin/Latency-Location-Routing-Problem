@@ -35,7 +35,7 @@ Source per instance: n <= 50 base method (standard budget), n = 75 base method (
 | SA-VND2 | 76 | 0.086 / 1.998 | 69 / 7 / 0 | 5.2e-13 | 61 / 14 / 1 | 8e-12 |
 | SA-VND (best variant) | 76 | 0.086 / 1.896 | 69 / 7 / 0 | 5.2e-13 | 61 / 14 / 1 | 8e-12 |
 | MA | 76 | 0.086 / 14.224 | 76 / 0 / 0 | 3.6e-14 | 75 / 1 / 0 | 5.3e-14 |
-| GBILS (our mean vs their best) | 35 | 0.032 / 2.372 | 27 / 8 / 0 | 5.6e-06 | (same comparison) |
+| GBILS (our mean vs their best) | 35 | 0.032 / 2.372 | 27 / 7 / 1 | 4.2e-06 | (same comparison) |
 
 GBILS publishes best values only (35 usable instances: Prins 30 and 5 of the 10 Barreto instances). Its Christofides69 rows (50x5, 75x10, 100x10) are values of another variant of the instance and are left out (`GBILS_UNMATCHED`); Min-134-8 and Or-117-14 are not in its table; no Tuzun-Burke instance is.
 

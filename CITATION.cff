@@ -1,0 +1,35 @@
+cff-version: 1.2.0
+message: "If you use this software or data, please cite the manuscript below (a DOI of the archived release will be added after publication)."
+title: "Latency Location-Routing Problem: GRASP-RVND with depot-aware diversification and an in-run route pool"
+type: software
+authors:
+  - family-names: Cedolin
+    given-names: Michele
+    affiliation: "American University of the Middle East, Kuwait"
+  - family-names: Bal
+    given-names: Alperen
+    affiliation: "American University of the Middle East, Kuwait"
+  - family-names: Çanakoğlu
+    given-names: Ethem
+    affiliation: "American University of the Middle East, Kuwait"
+repository-code: "https://github.com/MicheleCedolin/Latency-Location-Routing-Problem"
+license: MIT
+keywords:
+  - latency location-routing
+  - GRASP
+  - randomized variable neighborhood descent
+  - strategic oscillation
+  - set partitioning
+  - route pool
+preferred-citation:
+  type: article
+  title: "A GRASP–RVND Metaheuristic with Depot-Aware Diversification and an In-Run Route Pool for the Latency Location-Routing Problem"
+  authors:
+    - family-names: Cedolin
+      given-names: Michele
+    - family-names: Bal
+      given-names: Alperen
+    - family-names: Çanakoğlu
+      given-names: Ethem
+  journal: "International Transactions in Operational Research"
+  status: in-preparation
