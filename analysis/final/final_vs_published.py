@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Final method against the published algorithms: per-instance table and the paired comparisons (win / tie / loss, Wilcoxon), regenerated from the result archives.
 
-  python3 -I analysis/final/final_vs_published.py [--archives study_results] [--out DIR] [--atmost]
+  python3 -I analysis/final/final_vs_published.py [--archives study_results] [--out DIR] [--no-atmost]
 
 "Final method" = the method as reported in the manuscript, one source per instance:
     n <= 50      base method, standard budget  (final_1x_tuned.tar.gz, tag `tuned`, CPU limit max(5, 0.3 n) s)
     n == 75      base method, extended budget  (ext10_tuned.tar.gz,   tag `ext10`,  3 n s)        [Ch75-10: the layers were run for n >= 100 only]
     n >  75      base method + depot layer + route pool (b1_tuned.tar.gz, arm `B1`, 3 n s including the set-partitioning time)
-  Every source: 30 seeds, all runs feasible.  Prins 50-5-2BIS-5 is reported with the default rule (exactly Ng open depots, 949.10) as in the manuscript;
-  `--atmost` replaces it by the 30 runs of atmost_50-5-2BIS-5.tar.gz (at most Ng open depots, 945.45 = BKS).
+  Every source: 30 seeds, all runs feasible.  Prins 50-5-2BIS-5 is reported with the 30 runs of atmost_50-5-2BIS-5.tar.gz (at most Ng open depots, 945.45 = BKS),
+  as in the manuscript; `--no-atmost` keeps the runs of the default setting (exactly Ng open depots) of final_1x_tuned.tar.gz for this instance.
 
 Published values: bks/literature_results.csv (best, average of every algorithm; GBILS has best values only, 38 instances).  Gap = 100 (x - BKS) / BKS, BKS of cpp/manifest.tsv.
 Rules (fixed, the same for every algorithm):
@@ -150,11 +150,11 @@ def main():
     ap.add_argument("--literature", default=os.path.join(ROOT, "bks", "literature_results.csv"))
     ap.add_argument("--train", default=os.path.join(ROOT, "cpp", "selection", "train.txt"))
     ap.add_argument("--out", required=True)
-    ap.add_argument("--atmost", action="store_true", help="report Prins 50-5-2BIS-5 with the --atmost runs (945.45)")
+    ap.add_argument("--no-atmost", action="store_true", help="report Prins 50-5-2BIS-5 with the runs of the default setting (exactly Ng open depots) instead of the --atmost runs")
     a = ap.parse_args()
 
     man, lit, train = read_manifest(a.manifest), read_literature(a.literature), read_list(a.train)
-    final = load_final(a.archives, man, a.atmost)
+    final = load_final(a.archives, man, not a.no_atmost)
     order = sorted(man, key=lambda k: (FAMILIES.index(man[k]["family"]), man[k]["n"], k))
     bks = {k: man[k]["bks"] for k in man}
     best = {k: round(min(final[k][1]), 2) for k in man}
@@ -193,7 +193,7 @@ def main():
     L = []
     L.append("# Final method against the published algorithms\n")
     L.append("Source per instance: n <= 50 base method (standard budget), n = 75 base method (extended budget), n > 75 route-pool method B1 (extended budget). 30 runs each%s.\n" %
-             ("; Prins 50-5-2BIS-5 with --atmost" if a.atmost else "; Prins 50-5-2BIS-5 with the default rule (exactly Ng open depots)"))
+             ("; Prins 50-5-2BIS-5 with the default rule (exactly Ng open depots)" if a.no_atmost else "; Prins 50-5-2BIS-5 with --atmost"))
     L.append("## Quality by instance size (gap in % to the BKS)\n")
     L.append("| class | instances | source | gap of best | gap of mean | best <= BKS + 0.005 |\n|---|---|---|---|---|---|")
     classes = [("n <= 50", lambda n: n <= 50, "1x"), ("n = 75", lambda n: n == 75, "ext10"), ("n = 100", lambda n: n == 100, "B1"), ("n = 117/134", lambda n: n in (117, 134), "B1"),

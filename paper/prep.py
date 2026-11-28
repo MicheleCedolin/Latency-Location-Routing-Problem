@@ -230,7 +230,7 @@ def extended(ext, I, R1, D):
 def main():
     p = make_parser(__doc__.split("\n")[0], need_base=True, need_ext=True)
     p.add_argument("--atmost", default="/tmp/results_atmost", help="extracted atmost archive: directory results_atmost/ (default /tmp/results_atmost); its runs replace those of 50-5-2BIS-5")
-    p.add_argument("--no-atmost", action="store_true", help="keep the default-setting runs of 50-5-2BIS-5 (949.10, +0.386 %%)")
+    p.add_argument("--no-atmost", action="store_true", help="keep the default-setting runs of 50-5-2BIS-5 (exactly Ng open depots) instead of the --atmost runs")
     p.add_argument("--no-ext", action="store_true", help="skip the extended-budget layer")
     a = p.parse_args()
     D = dirs(a.out)["data"]

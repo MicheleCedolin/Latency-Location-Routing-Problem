@@ -23,7 +23,7 @@ paper/run_all.sh                             # output in /tmp/llrp_paper/out/{da
 ## Where the inputs come from
 
 * **Runs**: `final_1x_tuned.tar.gz` (tag `tuned`, 76 instances x 30 seeds, CPU limit max{5, 0.3 n} s), `ext10_tuned.tar.gz` (tag `ext10`, 58 instances x 30 seeds, 3 n s), `irace_logs.tar.gz`.
-* **Prins `50-5-2BIS-5`** is reported with the `--atmost` re-run (`atmost_50-5-2BIS-5.tar.gz`): its default-setting runs (949.10, exactly Ng open depots) are replaced by the at-most runs in
+* **Prins `50-5-2BIS-5`** is reported with the `--atmost` re-run (`atmost_50-5-2BIS-5.tar.gz`): its default-setting runs (exactly Ng open depots) are replaced by the at-most runs in
   the standard-budget layer (`prep.py --no-atmost` keeps the default-setting runs). The extended-budget layer covers only instances with n ≥ 75 and is not affected.
 * **Per-instance reference table** (`paperlib.reference()`), all from this repository: family, n and best-known value from [`../cpp/manifest.tsv`](../cpp/manifest.tsv);
   best value, average value and average run time of RLHEA (Zou et al. 2024) from [`../bks/literature_results.csv`](../bks/literature_results.csv); the 17 tuning instances from

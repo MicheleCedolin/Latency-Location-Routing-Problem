@@ -42,7 +42,7 @@ class Reference(unittest.TestCase):
 
 class Helpers(unittest.TestCase):
     def test_with_atmost_replaces_only_that_instance(self):
-        base = pd.DataFrame({"Instance": ["a", "50-5-2BIS-5", "50-5-2BIS-5", "b"], "Seed": [1, 1, 2, 1], "Total Latency": [1.0, 949.1, 949.1, 2.0], "family": ["prins"] * 4})
+        base = pd.DataFrame({"Instance": ["a", "50-5-2BIS-5", "50-5-2BIS-5", "b"], "Seed": [1, 1, 2, 1], "Total Latency": [1.0, 950.0, 950.0, 2.0], "family": ["prins"] * 4})
         am = pd.DataFrame({"Instance": ["50-5-2BIS-5"] * 3, "Seed": [1, 2, 3], "Total Latency": [945.45] * 3})
         with tempfile.TemporaryDirectory() as d:
             am.to_csv(os.path.join(d, "run.csv"), index=False)

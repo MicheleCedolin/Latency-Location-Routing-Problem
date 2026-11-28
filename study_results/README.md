@@ -43,4 +43,4 @@ bin/llrp_tools check-csv /tmp/study/results_final/prins/tuned                  #
 * **Binary.** The result files were produced by the v4 build (`binary_sha256` in `env.txt`). The current `llrp_fast` (v5) adds the optional `--atmost` and `--gran` flags; without them it is bit-identical to v4 (checked on four instance / seed cases),
   and `atmost_50-5-2BIS-5` was produced with the v5 flag `--atmost`.
   Compare results only for the same compiler and flags; bit-identity across CPUs or compilers is not guaranteed.
-* `--atmost` allows fewer than `Ng` open depots (the problem definition says *at most* `Ng`); it was needed only for `50-5-2BIS-5`, where the default "exactly `Ng`" rule gives 949.10 (+0.386 %) and `--atmost` gives the BKS 945.45.
+* `--atmost` allows fewer than `Ng` open depots (the problem definition says *at most* `Ng`); it was needed only for `50-5-2BIS-5`, where `--atmost` gives the BKS 945.45.

@@ -160,7 +160,7 @@ PLAN_ONLY=1 ./run_final.sh                           # time estimate for the fin
   The ext10 list contains the 58 instances with n >= 75 (57 with n >= 100 plus Ch75-10).
 * **`--atmost`.** The problem definition allows *at most* `Ng` open depots, while the default of `llrp_fast` opens exactly `Ng` (every earlier result was produced this way). With `--atmost` the solution is valid with 1..`Ng` open depots,
   the "force exactly `Ng`" steps are skipped and the GRASP diversification draws the number of candidate depots uniformly from 1..`Ng`; `llrp_tools verify` accepts both. Without the flag the behaviour is bit-identical to v4.
-  The manuscript uses it for one instance, Prins `50-5-2BIS-5` (30/30 runs reach the BKS 945.45187; default: 949.10): `FAMILY=custom FLAGS_FILE=irace/atmost.flags TAG=atmost ./run_final.sh 50-5-2BIS-5`.
+  The manuscript uses it for one instance, Prins `50-5-2BIS-5` (30/30 runs reach the BKS 945.45187): `FAMILY=custom FLAGS_FILE=irace/atmost.flags TAG=atmost ./run_final.sh 50-5-2BIS-5`.
 
 ## 6. Time estimates (30 seeds = 30 cores, 2.1 GHz Xeon, from `data/timing_probe_20it.tsv`; ± 30 %)
 
