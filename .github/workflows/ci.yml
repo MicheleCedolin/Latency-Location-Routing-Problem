@@ -42,7 +42,8 @@ jobs:
       - name: Comparison script on the archived 1x results
         run: |
           tar xzf study_results/final_1x_tuned.tar.gz -C "$RUNNER_TEMP"
-          python3 -I bks/compare_published.py "$RUNNER_TEMP"/results_final/*/tuned/summary.csv | tee "$RUNNER_TEMP/cmp.txt"
+          tar xzf study_results/atmost_50-5-2BIS-5.tar.gz -C "$RUNNER_TEMP"
+          python3 -I bks/compare_published.py "$RUNNER_TEMP"/results_final/*/tuned/summary.csv "$RUNNER_TEMP/results_atmost/summary.csv" | tee "$RUNNER_TEMP/cmp.txt"
           grep -q "^76 instances" "$RUNNER_TEMP/cmp.txt"
       - name: Extended-budget report on the archived 1x and ext10 results
         run: |

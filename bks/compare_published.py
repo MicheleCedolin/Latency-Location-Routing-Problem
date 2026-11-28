@@ -13,8 +13,11 @@ Output: per family and overall (over the instances that are in the input)
   * mean published time vs. mean CPU time per run of ours.
 Published times come from other machines, run counts and stopping rules (see bks/README.md); they are context, not a speed comparison.
 
+If an instance occurs in several input files, the last file wins.  Prins 50-5-2BIS-5 is reported with its --atmost runs in the manuscript: pass the summary.csv of
+study_results/atmost_50-5-2BIS-5.tar.gz (results_atmost/summary.csv) after the summary files of final_1x_tuned.tar.gz.
+
 Usage:
-  python3 bks/compare_published.py study_results_extracted/results_final/*/tuned/summary.csv
+  python3 bks/compare_published.py study_results_extracted/results_final/*/tuned/summary.csv results_atmost/summary.csv
   python3 bks/compare_published.py summary.csv --per-instance per_instance.csv --only-n-ge 75
 """
 import argparse

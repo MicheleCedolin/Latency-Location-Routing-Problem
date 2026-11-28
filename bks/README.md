@@ -57,7 +57,8 @@ Best value, average value and running time of seven published algorithms on the 
 ```bash
 # any summary.csv written by run_final.sh / run_config.sh (columns instance, best, mean, cpu_mean, ...)
 tar xzf study_results/final_1x_tuned.tar.gz -C /tmp
-python3 bks/compare_published.py /tmp/results_final/*/tuned/summary.csv
+tar xzf study_results/atmost_50-5-2BIS-5.tar.gz -C /tmp                          # Prins 50-5-2BIS-5 with its --atmost runs, as in the manuscript (the last file wins)
+python3 bks/compare_published.py /tmp/results_final/*/tuned/summary.csv /tmp/results_atmost/summary.csv
 python3 bks/compare_published.py my_summary.csv --only-n-ge 75 --per-instance per_instance.csv
 ```
 

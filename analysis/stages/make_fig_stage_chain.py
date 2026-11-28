@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage chain by instance size: mean gap to the best-known value of every stage of the method and of RLHEA (Supporting Information, stage-chain figure).
+"""Stage chain by instance size: mean gap to the best-known value of every stage of the method and of RLHEA (stage-chain figure).
 
   python3 -I analysis/stages/make_fig_stage_chain.py [--stages CSV] [--memetic CSV] [--out DIR]
 

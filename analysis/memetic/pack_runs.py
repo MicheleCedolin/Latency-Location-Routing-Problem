@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pack the raw per-run files of the memetic-phase campaigns (stage 5, Supporting Information S7) into the standard merged layout of study_results/.
+"""Pack the raw per-run files of the memetic-phase campaigns (stage 5, Appendix F) into the standard merged layout of study_results/.
 
   python3 -I pack_runs.py --res results_e_pilot --res results_e_ext --res results_e_rest14 --out results_memetic --tools cpp/bin/llrp_tools
 
