@@ -2,7 +2,7 @@
 
 Source code, benchmark instances and best-known values accompanying the manuscript on a **GRASP–RVND** heuristic with
 constant-time move evaluation and **irace**-tuned configuration for the **Latency Location-Routing Problem**
-(companion repository of the manuscript prepared for *International Transactions in Operational Research*, ITOR).
+(companion repository of the manuscript submitted to *International Transactions in Operational Research*, ITOR).
 
 The LLRP asks for a set of open depots and a set of vehicle routes that serve all customers and **minimise the sum of the customer arrival times**
 (cumulative cost; vehicles do not return to the depot; at most `Nv` routes, at most `Ng` open depots; depot capacities are ignored, as in the literature).

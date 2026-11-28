@@ -17,6 +17,11 @@ Rules (fixed, the same for every algorithm):
   * Wilcoxon signed-rank test on the paired gap differences, ties dropped, two-sided, normal approximation without continuity correction (scipy, method="approx");
   * subsets: all 76 instances; n >= 75 (58); held-out n >= 75 (45; the instances not in cpp/selection/train.txt); n >= 150 (30); n = 200 (18).
 SA-VND is reported per variant and as "best variant" (per instance the smaller of the three variant averages / best values).
+The comparison table of the manuscript (Panel B) was produced with a different tie rule per algorithm; `manuscript_rows()` reproduces these rows (rules recovered from the printed values, see the README):
+  * RLHEA, all 76 instances, mean vs Avg: tie = difference of the two gaps <= 0.005 percentage points; the p value printed is that of the single rule above (0.74, printed as 7e-1);
+  * SA-VND (best variant), mean vs Avg: tie = |difference| <= 0.1, zero differences split between the signs (zero_method="zsplit");
+  * M-ILS, mean vs Avg: tie = |difference| <= 0.1, zero differences dropped;
+  * GBILS (our mean vs their best, 35 instances): tie = |difference| <= 0.1, zero differences dropped; the printed p value (6.3e-6) is not matched (6.1e-6 one-sided, 1.2e-5 two-sided).
 
 Writes  DIR/final_per_instance.csv, DIR/final_per_instance.tex (longtable) and DIR/final_vs_published.md.  CI compares the three files with analysis/final/reference/.
 """
@@ -138,6 +143,39 @@ def compare(rows, key_ours, theirs, bks):
     return len(ks), cls.count("W"), cls.count("T"), cls.count("L"), mg(lambda k: key_ours[k]), mg(lambda k: theirs[k]), p
 
 
+def manuscript_rows(order, mean, lit, bks, sa_avg):
+    """The rows of the comparison table of the manuscript (rules per algorithm, see the module docstring).  Returns [(label, n, W, T, L, p text)]."""
+    rows = []
+
+    def tol_rows(label, theirs, tol, zero):
+        ks = [k for k in order if theirs.get(k) is not None]
+        diff = [mean[k] - theirs[k] for k in ks]
+        t = [abs(x) <= tol + 1e-9 for x in diff]
+        W = sum(1 for x, ti in zip(diff, t) if not ti and x < 0)
+        L = sum(1 for x, ti in zip(diff, t) if not ti and x > 0)
+        d = [x for x, ti in zip(diff, t) if not ti] if zero == "wilcox" else [0.0 if ti else x for x, ti in zip(diff, t)]
+        p2 = float(wilcoxon(d, zero_method=zero, method="approx", correction=False).pvalue)
+        p1 = float(wilcoxon(d, zero_method=zero, alternative="less", method="approx", correction=False).pvalue)
+        return len(ks), W, sum(t), L, p2, p1
+
+    rl = {k: lit[k]["RLHEA"][1] for k in order}
+    gd = [gap(mean[k], bks[k]) - gap(rl[k], bks[k]) for k in order]
+    t = [abs(x) <= TIE + 1e-9 for x in gd]
+    p_single = float(wilcoxon([gap(mean[k], bks[k]) - gap(rl[k], bks[k]) for k in order if classify(mean[k], rl[k]) != "T"],
+                              method="approx", correction=False).pvalue)
+    rows.append(("RLHEA, all 76 instances (tie: gaps within 0.005 points; p of the single rule)", len(order), sum(1 for x, ti in zip(gd, t) if not ti and x < 0), sum(t),
+                 sum(1 for x, ti in zip(gd, t) if not ti and x > 0), fp(p_single)))
+    n, W, T, L, p2, p1 = tol_rows("SA-VND", sa_avg, 0.1, "zsplit")
+    rows.append(("SA-VND (best variant) (tie <= 0.1, zero differences split)", n, W, T, L, fp(p2)))
+    avg = {k: (lit[k].get("M-ILS") or (None, None))[1] for k in order}
+    n, W, T, L, p2, p1 = tol_rows("M-ILS", avg, 0.1, "wilcox")
+    rows.append(("M-ILS (tie <= 0.1, zero differences dropped)", n, W, T, L, fp(p2)))
+    gb = {k: (lit[k].get("GBILS") or (None, None))[0] for k in order if k not in GBILS_UNMATCHED}
+    n, W, T, L, p2, p1 = tol_rows("GBILS", gb, 0.1, "wilcox")
+    rows.append(("GBILS, our mean vs their best (tie <= 0.1, zero differences dropped; printed p 6.3e-6, not matched: %s one-sided, %s two-sided)" % (fp(p1), fp(p2)), n, W, T, L, "see label"))
+    return rows
+
+
 def sa_best(lit, k, idx):
     v = [lit[k][a][idx] for a in ("SA-VND0", "SA-VND1", "SA-VND2") if lit[k].get(a) and lit[k][a][idx] is not None]
     return min(v) if v else None
@@ -211,7 +249,12 @@ def main():
         strict = sum(1 for k in ks if sum(final[k][1]) / 30.0 <= rl_avg[k])
         rnd = sum(1 for k in ks if mean[k] <= rl_avg[k] + 1e-9)
         L.append("| %s | %d / %d / %d | %s | %d / %d / %d | %s | %.3f / %.3f | %d / %d | %d / %d |" % (name, cm[1], cm[2], cm[3], fp(cm[6]), cb[1], cb[2], cb[3], fp(cb[6]), cm[4], cm[5], strict, len(ks), rnd, len(ks)))
-    L.append("\n## Other published algorithms (all instances for which the algorithm has values)\n")
+    L.append("\n## Comparison table of the manuscript (Panel B): the rows as printed\n")
+    L.append("The manuscript uses one tie rule per algorithm (recovered from the printed values; see `analysis/final/README.md`).\n")
+    L.append("| row | instances | W / T / L | p |\n|---|---|---|---|")
+    for lab, n_, W_, T_, L_, ptxt in manuscript_rows(order, mean, lit, bks, {k: sa_best(lit, k, 1) for k in order}):
+        L.append("| %s | %d | %d / %d / %d | %s |" % (lab, n_, W_, T_, L_, ptxt))
+    L.append("\n## Other published algorithms, single rule (all instances for which the algorithm has values)\n")
     L.append("| algorithm | instances | mean gap ours / theirs (Avg) | mean vs Avg: W / T / L | p | best vs Best: W / T / L | p |\n|---|---|---|---|---|---|---|")
     others = [(al, {k: (lit[k].get(al) or (None, None))[1] for k in order}, {k: (lit[k].get(al) or (None, None))[0] for k in order}) for al in ["MS-VNS", "M-ILS", "SA-VND0", "SA-VND1", "SA-VND2", "MA", "GBILS"]]
     others.insert(5, ("SA-VND (best variant)", {k: sa_best(lit, k, 1) for k in order}, {k: sa_best(lit, k, 0) for k in order}))

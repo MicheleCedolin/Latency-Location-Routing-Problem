@@ -18,13 +18,24 @@ Source per instance: n <= 50 base method (standard budget), n = 75 base method (
 
 | instances | our mean vs RLHEA avg: W / T / L | p | our best vs RLHEA best: W / T / L | p | mean gap ours / RLHEA (avg) | mean <= avg strict | mean <= avg (rounded) |
 |---|---|---|---|---|---|---|---|
-| all 76 instances | 23 / 27 / 26 | 0.739 | 2 / 61 / 13 | 0.0026 | 0.086 / 0.073 | 38 / 76 | 50 / 76 |
+| all 76 instances | 23 / 27 / 26 | 0.739 | 1 / 62 / 13 | 0.0019 | 0.086 / 0.073 | 38 / 76 | 50 / 76 |
 | n >= 75 (58) | 22 / 12 / 24 | 0.823 | 0 / 45 / 13 | 0.0015 | 0.113 / 0.096 | 29 / 58 | 34 / 58 |
 | held-out n >= 75 (45) | 16 / 10 / 19 | 0.768 | 0 / 35 / 10 | 0.0051 | 0.120 / 0.095 | 22 / 45 | 26 / 45 |
 | n >= 150 (30) | 15 / 2 / 13 | 0.891 | 0 / 19 / 11 | 0.0033 | 0.174 / 0.160 | 17 / 30 | 17 / 30 |
 | n = 200 (18) | 8 / 1 / 9 | 0.435 | 0 / 8 / 10 | 0.0051 | 0.254 / 0.189 | 9 / 18 | 9 / 18 |
 
-## Other published algorithms (all instances for which the algorithm has values)
+## Comparison table of the manuscript (Panel B): the rows as printed
+
+The manuscript uses one tie rule per algorithm (recovered from the printed values; see `analysis/final/README.md`).
+
+| row | instances | W / T / L | p |
+|---|---|---|---|
+| RLHEA, all 76 instances (tie: gaps within 0.005 points; p of the single rule) | 76 | 19 / 36 / 21 | 0.739 |
+| SA-VND (best variant) (tie <= 0.1, zero differences split) | 76 | 65 / 11 / 0 | 1.3e-13 |
+| M-ILS (tie <= 0.1, zero differences dropped) | 76 | 69 / 7 / 0 | 5.2e-13 |
+| GBILS, our mean vs their best (tie <= 0.1, zero differences dropped; printed p 6.3e-6, not matched: 6.1e-06 one-sided, 1.2e-05 two-sided) | 35 | 25 / 10 / 0 | see label |
+
+## Other published algorithms, single rule (all instances for which the algorithm has values)
 
 | algorithm | instances | mean gap ours / theirs (Avg) | mean vs Avg: W / T / L | p | best vs Best: W / T / L | p |
 |---|---|---|---|---|---|---|
